@@ -7,6 +7,9 @@ dist/
 build/
 *.tsbuildinfo
 
+# generated (wrangler types)
+worker-configuration.d.ts
+
 # env
 .env
 .env.*

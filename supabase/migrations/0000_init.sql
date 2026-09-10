@@ -1,0 +1,4 @@
+-- 0000_init — MILESTONE-01 baseline.
+-- Intentionally empty: the event / step / scoring data model (SPEC.md §7.3)
+-- lands with MILESTONE-02. This migration only establishes a clean, ordered
+-- migration history that applies from an empty database.

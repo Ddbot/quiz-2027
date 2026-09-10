@@ -1,36 +1,36 @@
 ## 1. Workspace scaffold
 
-- [ ] 1.1 Initialise a pnpm workspace at the repo root: `pnpm-workspace.yaml` covering `apps/*`, `packages/*`, `tools/*`; root `package.json` with `packageManager` pinned (Corepack) and `engines.node >= 20.19`; `.nvmrc` = `22`. Verify `pnpm install` succeeds on Node 22.
-- [ ] 1.2 Add shared config: root `tsconfig.base.json`, ESLint flat config, Prettier, `.editorconfig`, `.gitignore` (node_modules, dist, `.env*`, `.wrangler`, `.vercel`, Supabase volumes), `.env.example` placeholders per app. Verify `pnpm -r lint` runs with zero errors on the empty tree.
-- [ ] 1.3 Add root scripts `typecheck`, `lint`, `build`, `test` that fan out with `pnpm -r`. Verify each runs (no-op success) before packages exist.
-- [ ] 1.4 Write `README.md` with a secrets matrix table (service → variable → where set) and local setup steps (`nvm install`, `pnpm install`, `supabase start`, `pnpm dev`). Verify a second person could follow it (self-review checklist in the PR).
+- [x] 1.1 Initialise a pnpm workspace at the repo root: `pnpm-workspace.yaml` covering `apps/*`, `packages/*`, `tools/*`; root `package.json` with `packageManager` pinned (Corepack) and `engines.node >= 20.19`; `.nvmrc` = `22`. Verify `pnpm install` succeeds on Node 22.
+- [x] 1.2 Add shared config: root `tsconfig.base.json`, ESLint flat config, Prettier, `.editorconfig`, `.gitignore` (node_modules, dist, `.env*`, `.wrangler`, `.vercel`, Supabase volumes), `.env.example` placeholders per app. Verify `pnpm -r lint` runs with zero errors on the empty tree.
+- [x] 1.3 Add root scripts `typecheck`, `lint`, `build`, `test` that fan out with `pnpm -r`. Verify each runs (no-op success) before packages exist.
+- [x] 1.4 Write `README.md` with a secrets matrix table (service → variable → where set) and local setup steps (`nvm install`, `pnpm install`, `supabase start`, `pnpm dev`). Verify a second person could follow it (self-review checklist in the PR).
 
 ## 2. Shared package (`packages/shared`)
 
-- [ ] 2.1 Create `packages/shared` as a TS-only package (no `dependencies`; `devDependencies` limited to `typescript`, `vitest`). Export a trivial placeholder (e.g. `packageName` constant) plus a `types.ts` stub. Verify `pnpm --filter @quiz/shared build` emits `dist/`.
-- [ ] 2.2 Add a Vitest suite with one passing test and an ESLint `no-restricted-imports` rule banning `react`, `partyserver`, `cloudflare:*`, `@supabase/*`, `@sentry/*`. Verify `pnpm --filter @quiz/shared test` passes and the lint rule flags a deliberately-added `import "react"` (then remove it).
-- [ ] 2.3 Add a workspace dependency-graph check (script using `pnpm list --filter @quiz/shared --depth 0 --json`) asserting the package has no runtime deps. Verify the script exits 0.
+- [x] 2.1 Create `packages/shared` as a TS-only package (no `dependencies`; `devDependencies` limited to `typescript`, `vitest`). Export a trivial placeholder (e.g. `packageName` constant) plus a `types.ts` stub. Verify `pnpm --filter @quiz/shared build` emits `dist/`.
+- [x] 2.2 Add a Vitest suite with one passing test and an ESLint `no-restricted-imports` rule banning `react`, `partyserver`, `cloudflare:*`, `@supabase/*`, `@sentry/*`. Verify `pnpm --filter @quiz/shared test` passes and the lint rule flags a deliberately-added `import "react"` (then remove it).
+- [x] 2.3 Add a workspace dependency-graph check (script using `pnpm list --filter @quiz/shared --depth 0 --json`) asserting the package has no runtime deps. Verify the script exits 0.
 
 ## 3. Web app shell (`apps/web`)
 
-- [ ] 3.1 Scaffold Vite + React 18 + TS in `apps/web`; add Tailwind and shadcn/ui (`components.json`, CSS variables, slate base) and one generated `Button` component. Verify `pnpm --filter web dev` serves and `pnpm --filter web build` produces `dist/`.
-- [ ] 3.2 Add `react-router-dom` with routes `/e/:joinCode` (player placeholder, reads and displays the join code), `/admin/*` (admin placeholder), `/screen/:eventId` (big-screen placeholder shell, reads the event id). Verify a Vitest + Testing Library test renders each route and asserts the URL param is shown.
+- [x] 3.1 Scaffold Vite + React 18 + TS in `apps/web`; add Tailwind and shadcn/ui (`components.json`, CSS variables, slate base) and one generated `Button` component. Verify `pnpm --filter web dev` serves and `pnpm --filter web build` produces `dist/`.
+- [x] 3.2 Add `react-router-dom` with routes `/e/:joinCode` (player placeholder, reads and displays the join code), `/admin/*` (admin placeholder), `/screen/:eventId` (big-screen placeholder shell, reads the event id). Verify a Vitest + Testing Library test renders each route and asserts the URL param is shown.
 - [ ] 3.3 Add a `VITE_PARTY_HOST` env binding and a dev-only "ping" widget on `/screen/:eventId` that opens a `partysocket` connection for the event id, sends `"hello"`, and displays the echoed reply. Verify against a locally running worker (`wrangler dev`) that the echo appears.
 - [ ] 3.4 Add responsive viewport meta and a minimal high-contrast base theme for `/screen`. Verify the player and screen placeholders load in iOS Safari and Android Chrome (BrowserStack or a real device), and admin/screen in desktop Chrome and Edge; record which was used in the PR.
 
 ## 4. Real-time worker (`apps/party`)
 
-- [ ] 4.1 Scaffold `apps/party` as a Cloudflare Worker with `partyserver`; add `wrangler.jsonc` declaring an `EventRoom` class as a SQLite-backed Durable Object (`migrations` with `new_sqlite_classes: ["EventRoom"]`), `compatibility_date`, and `compatibility_flags` as needed. Verify `pnpm --filter party exec wrangler deploy --dry-run` succeeds.
-- [ ] 4.2 Implement `EventRoom` extending `partyserver`'s `Server`: on WebSocket message, echo the text back to the sender; no auth, no state. Route requests by event id, deriving the stub from a namespace handle obtained via `.jurisdiction("eu")`. Verify a Vitest + `@cloudflare/vitest-pool-workers` test: two clients for event `E` connect, each echo works, and both are shown to hit one instance.
+- [x] 4.1 Scaffold `apps/party` as a Cloudflare Worker with `partyserver`; add `wrangler.jsonc` declaring an `EventRoom` class as a SQLite-backed Durable Object (`migrations` with `new_sqlite_classes: ["EventRoom"]`), `compatibility_date`, and `compatibility_flags` as needed. Verify `pnpm --filter party exec wrangler deploy --dry-run` succeeds.
+- [x] 4.2 Implement `EventRoom` extending `partyserver`'s `Server`: on WebSocket message, echo the text back to the sender; no auth, no state. Route requests by event id, deriving the stub from a namespace handle obtained via `.jurisdiction("eu")`. Verify a Vitest + `@cloudflare/vitest-pool-workers` test: two clients for event `E` connect, each echo works, and both are shown to hit one instance.
 - [ ] 4.3 Add a temporary diagnostic route `GET /__diag/jurisdiction` that instantiates an `EventRoom` stub through the `eu` namespace and returns `{ ok: true }` or the error. Verify it returns `ok:true` under `wrangler dev`.
 - [ ] 4.4 Add `withSentry` (`@sentry/cloudflare`) around the worker fetch handler, DSN from a secret, no-op when absent. Verify a forced throw on a `/__diag/boom` route is captured locally (or in the Sentry project after deploy).
 
 ## 5. Supabase project (`supabase/`)
 
-- [ ] 5.1 Run `supabase init`; commit `supabase/config.toml`. Verify `supabase start` brings the local stack up and `supabase status` shows all services healthy.
-- [ ] 5.2 Add an initial empty migration (`supabase/migrations/0000_init.sql` with a comment only). Verify `supabase db reset` applies cleanly from empty.
-- [ ] 5.3 Create the production Supabase project in an EU region (dashboard); record project ref and region in the PR. Verify the region shown in project settings is an EU region.
-- [ ] 5.4 Link the repo (`supabase link`) and run `supabase db push` to production. Verify the production migration history shows `0000_init`.
+- [x] 5.1 Run `supabase init`; commit `supabase/config.toml`. Verify `supabase start` brings the local stack up and `supabase status` shows all services healthy.
+- [x] 5.2 Add an initial empty migration (`supabase/migrations/0000_init.sql` with a comment only). Verify `supabase db reset` applies cleanly from empty.
+- [x] 5.3 Create the production Supabase project in an EU region (dashboard); record project ref and region in the PR. Verify the region shown in project settings is an EU region. — **Project `dehwczlcnmhmtfarrxnv` created, region `eu-west-2` (London, UK). NOT an EU-member region — residency requirement NOT met; accepted by owner for the PoC, tracked as SPEC.md Q-009.**
+- [x] 5.4 Link the repo (`supabase link`) and run `supabase db push` to production. Verify the production migration history shows `0000_init`. — `supabase migration list` shows Local `0000` = Remote `0000`.
 
 ## 6. CI and deployment
 

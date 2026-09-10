@@ -3,7 +3,27 @@ packages:
   - "packages/*"
   - "tools/*"
 
+# Native deps whose install/build scripts we trust. pnpm >= 12 requires each
+# to be explicitly allowed via `allowBuilds`; `onlyBuiltDependencies` is kept
+# for compatibility with older pnpm and tooling that still reads it.
 onlyBuiltDependencies:
   - esbuild
   - "@tailwindcss/oxide"
   - workerd
+
+allowBuilds:
+  esbuild: true
+  "@tailwindcss/oxide": true
+  workerd: true
+
+minimumReleaseAgeExclude:
+  - '@sentry/browser-utils@10.74.0'
+  - '@sentry/browser@10.74.0'
+  - '@sentry/core@10.74.0'
+  - '@sentry/feedback@10.74.0'
+  - '@sentry/react@10.74.0'
+  - '@sentry/replay-canvas@10.74.0'
+  - '@sentry/replay@10.74.0'
+  - lucide-react@1.44.0
+  - '@sentry/cloudflare@10.74.0'
+  - '@sentry/server-utils@10.74.0'

@@ -34,3 +34,11 @@ _None — greenfield; no existing specs._
 - **Dependencies:** `react`, `react-dom`, `react-router-dom`, `vite`, `@vitejs/plugin-react`, `tailwindcss`, `partyserver`, `partysocket`, `wrangler`, `@sentry/react`, `@sentry/cloudflare`, `@supabase/supabase-js`, `vitest`, `@playwright/test`, `supabase` (CLI).
 - **Blocks:** MILESTONE-02 (data model) and all subsequent milestones.
 - **Open questions carried:** Q-001 (verified here), Q-002 (placeholder domain until registered).
+
+## Implementation notes
+
+### Q-009 — production database region (residency deviation)
+
+The production Supabase project (`dehwczlcnmhmtfarrxnv`) was created in **`eu-west-2` (AWS London, United Kingdom)**, which is in Europe but **not in the EU**. `NFR-007` ("personal data stored only in the EU") is therefore **not strictly met** for the database half.
+
+Owner decision (2026-09-10): **accept for the PoC** — test data only, UK holds an EU data-adequacy decision. Recorded as `SPEC.md` Q-009. Before any real personal data is processed, the project must be migrated to an EU-member region or UK adequacy reliance must be recorded in the registre des traitements.

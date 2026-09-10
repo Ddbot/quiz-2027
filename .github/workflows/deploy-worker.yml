@@ -1,0 +1,35 @@
+name: Deploy worker
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/party/**"
+      - "packages/shared/**"
+      - "pnpm-lock.yaml"
+      - ".github/workflows/deploy-worker.yml"
+
+concurrency:
+  group: deploy-worker
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: pnpm/action-setup@v4
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - name: Deploy to Cloudflare
+        run: pnpm --filter party exec wrangler deploy
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}

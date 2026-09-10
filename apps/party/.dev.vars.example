@@ -1,0 +1,7 @@
+# apps/party — local worker secrets. Copy to `.dev.vars` for `wrangler dev`.
+# In production these are set with `wrangler secret put <NAME>` (never committed).
+
+SENTRY_DSN=
+SUPABASE_URL=
+SUPABASE_SERVICE_ROLE_KEY=
+SUPABASE_JWKS_URL=

@@ -1,0 +1,23 @@
+name: Supabase keepalive
+
+# Supabase Free pauses a project after ~7 days of inactivity. Ping the REST
+# endpoint every 3 days so a scheduled test event never needs manual reactivation
+# (platform-foundation: "Free-tier database stays reachable", NFR-003).
+
+on:
+  schedule:
+    - cron: "17 6 */3 * *"
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST
+        run: |
+          curl -fsS "${SUPABASE_URL%/}/rest/v1/" \
+            -H "apikey: ${SUPABASE_ANON_KEY}" \
+            -o /dev/null -w "HTTP %{http_code}\n"
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_ANON_KEY: ${{ secrets.SUPABASE_ANON_KEY }}
