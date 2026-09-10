@@ -1,0 +1,9 @@
+dist
+build
+coverage
+.wrangler
+.vercel
+pnpm-lock.yaml
+supabase/.branches
+supabase/.temp
+CHANGELOG.md

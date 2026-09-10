@@ -1,0 +1,61 @@
+schema: spec-driven
+
+context: |
+  Product: Quiz 2027 — a custom live-event quiz platform. Audience plays MCQ rounds on
+  their phones (solo or in teams); an MC drives a synchronised flow that updates every
+  phone + venue big screen within 2s; an Operator casts the big screen via the
+  Presentation API. Current iteration is a ZERO-COST proof of concept: free tiers only,
+  10 concurrent connections, validated by a scripted test event. Not a public show yet.
+
+  Authoritative documents in the repo root:
+    - REQUIREMENTS.md (v1.1, analyst output)
+    - SPEC.md (solution-architect output: 87 FRs, 19 NFRs, 15 milestones, data model,
+      WebSocket protocol, security model). SPEC.md milestones map 1:1 to OpenSpec changes.
+
+  Tech stack (approved, do not re-litigate):
+    - Frontend: React 18 + TypeScript + Vite (SPA), shadcn/ui + Tailwind, TanStack Query,
+      partysocket client, small Zustand store for live state. Hosted on Vercel (Hobby).
+    - Real-time: self-hosted PartyServer (`partyserver` lib) on Cloudflare Workers FREE
+      plan; one SQLite-backed Durable Object per event, namespace pinned to the `eu`
+      jurisdiction. Deployed with wrangler.
+    - Backend/data: Supabase (Free, EU region) — Postgres (RLS on) as system of record,
+      Auth (anonymous sign-in for guests + email/password for accounts), Storage.
+    - DO -> Postgres writes use the Supabase service-role key, held ONLY as a Cloudflare
+      Worker secret.
+    - Error tracking: Sentry (free). Tests: Vitest + Playwright + a Node partysocket
+      harness simulating 10 clients.
+    - CI/CD: GitHub; Vercel Git integration (frontend); GitHub Action -> wrangler deploy
+      (Worker); supabase db push (schema). Environments: local + production only.
+
+  Conventions:
+    - Scoring / timer / MCQ rules live in framework-agnostic TS modules with NO Cloudflare
+      dependency (portable so a raw-Durable-Objects fallback stays cheap).
+    - Conventional commits. One git branch per component/function. Tests first (TDD).
+    - Admin console is French only; player + big-screen surfaces are FR/EN per event.
+    - EU data residency is a hard constraint.
+
+  Known open item blocking full residency claim (verify in the scaffold change):
+  whether `.jurisdiction("eu")` is available for SQLite Durable Objects on the Workers
+  FREE plan (SPEC.md Q-001). Domain name not yet registered — use a placeholder (Q-002).
+
+# Per-artifact rules (optional)
+# Add custom rules for specific artifacts.
+# Example:
+#   rules:
+#     proposal:
+#       - Keep proposals under 500 words
+#       - Always include a "Non-goals" section
+#     tasks:
+#       - Break tasks into chunks of max 2 hours
+
+# Per-operation guidance (optional)
+# Add advisory guidance for how apply and archive work should be conducted.
+# This is separate from artifact rules above.
+# Example:
+#   operations:
+#     apply:
+#       guidance:
+#         - Keep test summaries concise
+#     archive:
+#       guidance:
+#         - Summarize the archive outcome before finishing

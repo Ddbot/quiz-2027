@@ -1,0 +1,48 @@
+You are an analyst that will help me create a live social gaming app aimed at being played during specific events. 
+
+// CONTEXT
+The game will be played by a group of people in a live event. It shall be played by teams of 2 to 4 people.
+The game will be played on a web app that will be displayed on the guests' smartphones.
+ One or more big screen(s) in the venue will display info and tips about the current step. 
+
+// PRESENTATION API
+The content of the big screen serves as a scoreboard and is different than the content of the player's screen. 
+It will make use of the Presentation API so that the "MC" role can switch to a secondary screen to control the game flow and what is displayed on the big screens.
+
+// ROLES
+There will be 3 types of roles:
+- Player
+  - participate in games and earn points
+- Operator (admin)
+  - manage the game flow and what is displayed on the big screens
+- the MC (admin who can control the game flow):
+  - create games and set their parameters (timer, scoring system, etc.)
+  - start, pause, and stop games
+  - view the current ranking of the players
+  - view the current ranking of the teams
+
+// ONBOARDING
+Players will be able to join in by scanning a QR code or by entering a short code (which will be displayed in the event's venue). 
+The player can either join in totally anonymously (she will just have to enter a "user name") or create an account (it will have to adhere to GDPR standards). 
+The user will then have the choice between "Creating a team" and "Join a team". 
+After this step, the player will see a "Waiting screen" (which content can either be a media or aw countdown to the start of the event). 
+
+// GAME MECHANICS
+The game will mostly be a stepped quiz. Each step will be a different type of game. 
+
+Whatever its type, each game can only be either:
+- timed (the fastest wins) 
+- untimed (time is of no matter). 
+
+Each game will always have a countdown timer (that can be 0 for untimed games and will be set by the MC) and a scoring system (that will have to be setup in a form by the MC).
+In case of a "tie-break", the winners shall win the same amount of points. 
+
+// CONCEPT OF CONTAINER FOR GAMES
+A Game must be thought of as a "container", because in future versions, a game might be a live "hack'n slash" multiplayer game where players will have to compete in real time.
+
+For v1:
+- we'll only have 1 type of game: multiple choice questions
+- we'll stick to a simple scoring system where each correct answer gives 1 point. 
+- the players' data shall be stored in a database and will be used to calculate the final ranking at the end of the game.
+
+
