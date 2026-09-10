@@ -34,8 +34,8 @@
 
 ## 6. CI and deployment
 
-- [ ] 6.1 Add `.github/workflows/ci.yml`: on PR, Node 22, `pnpm install --frozen-lockfile`, then `pnpm -r typecheck lint build test`. Verify a PR shows all checks green and that an injected type error makes the check fail.
-- [ ] 6.2 Configure branch protection on `main` requiring the CI checks. Verify a PR cannot be merged while a check is red (screenshot in PR).
+- [x] 6.1 Add `.github/workflows/ci.yml`: on PR, Node 22, `pnpm install --frozen-lockfile`, then `pnpm -r typecheck lint build test`. Verify a PR shows all checks green and that an injected type error makes the check fail. — PR #1 `verify` job green on `b0b9b5f`; deliberate type error (`d559163`) failed at the Typecheck step with Lint/Build/Test skipped, then reverted.
+- [x] 6.2 Configure branch protection on `main` requiring the CI checks. Verify a PR cannot be merged while a check is red (screenshot in PR). — Repo made public (Pro-gated for private); ruleset `main` (id 22776695) active: requires `verify` check + PR, blocks force-push/deletion. With `verify` red (`f66f317`), PR #1 `mergeStateStatus` = `BLOCKED`; reverted.
 - [ ] 6.3 Add `.github/workflows/deploy-worker.yml`: on push to `main` touching `apps/party` or `packages/shared`, `wrangler deploy` using `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` secrets. Verify a merge deploys the worker and the run logs show success.
 - [ ] 6.4 Create the Vercel project: Root Directory `apps/web`, Vite preset, build `pnpm --filter web build`, install `pnpm install`; set web env vars. Verify a merge to `main` publishes to the production URL and all three routes load.
 - [ ] 6.5 Populate all secrets per the README matrix: Wrangler secrets via `wrangler secret put`, GitHub Actions secrets, Vercel env vars. Verify `wrangler secret list` and the GitHub/Vercel settings match the matrix; confirm no service-role key is present in any `apps/web` env.
@@ -46,15 +46,15 @@
 
 ## 8. Q-001 resolution and close-out
 
-- [ ] 8.1 After the first production worker deploy, call `/__diag/jurisdiction` against the deployed worker on the target (free) plan. Record `ok` or the exact error in `proposal.md` (append a "Q-001 result" note) and in the PR description.
-- [ ] 8.2 Update `SPEC.md` Q-001 status (Resolved / or Open with the recorded limitation and the residency requirement marked unmet pending an owner plan decision). If unmet, open a follow-up note for the owner.
-- [ ] 8.3 Remove the `/__diag/*` routes from `apps/party`. Verify `wrangler deploy --dry-run` still passes and no `__diag` string remains in the source.
+- [x] 8.1 After the first production worker deploy, call `/__diag/jurisdiction` against the deployed worker on the target (free) plan. Record `ok` or the exact error in `proposal.md` (append a "Q-001 result" note) and in the PR description. — `{"ok":true}` on the Free plan; recorded in `proposal.md` + PR #1 description.
+- [x] 8.2 Update `SPEC.md` Q-001 status (Resolved / or Open with the recorded limitation and the residency requirement marked unmet pending an owner plan decision). If unmet, open a follow-up note for the owner. — Q-001 → **Resolved (available)**; NFR-007 DO half met.
+- [ ] 8.3 Remove the `/__diag/*` routes from `apps/party`. Verify `wrangler deploy --dry-run` still passes and no `__diag` string remains in the source. — **deferred until Sentry error test (9.4) uses `/__diag/boom`.**
 
 ## 9. Milestone acceptance verification
 
 - [ ] 9.1 End-to-end check against production: merge a trivial change to `apps/web` and confirm Vercel auto-publishes it; merge a trivial change to `apps/party` and confirm the Action redeploys it. (SPEC.md MILESTONE-01 AC1)
 - [ ] 9.2 From a browser, open a WebSocket to the deployed worker for a sample event id, send a message, and confirm the echo. (AC2)
-- [ ] 9.3 Confirm the `EventRoom` namespace is created with `jurisdiction: "eu"` in the source and — per task 8.1 — that creation succeeded on the target plan, or that the exception is documented. (AC3)
+- [x] 9.3 Confirm the `EventRoom` namespace is created with `jurisdiction: "eu"` in the source and — per task 8.1 — that creation succeeded on the target plan, or that the exception is documented. (AC3) — source: `apps/party/src/index.ts` `JURISDICTION = "eu"` passed to `routePartykitRequest` + `getServerByName`; creation on Free plan confirmed (`/__diag/jurisdiction` ok, DO ns `use_sqlite: true`).
 - [ ] 9.4 Trigger one error in the web app and one in the worker; confirm both appear in Sentry. (AC4)
 - [ ] 9.5 Review billing on Supabase, Vercel, Cloudflare, and Sentry; confirm every service is on a free plan. (NFR-013)
 - [ ] 9.6 Tag the merge commit `m01-scaffold`.

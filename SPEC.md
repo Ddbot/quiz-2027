@@ -593,7 +593,7 @@ Milestones are ordered by dependency. Effort: S ≈ ≤1 day, M ≈ 2–4 days, 
 
 | ID | Question or Assumption | Owner | Status |
 |---|---|---|---|
-| Q-001 | Is the `eu` jurisdiction available for SQLite-backed Durable Objects on the Cloudflare **Workers Free** plan? If not, the PoC either accepts non-EU DO placement with test-only data or the commercial phase moves to Workers Paid earlier. Verify in MILESTONE-01. | Architect / Owner | Open — blocker for NFR-007 as stated; test-data-only fallback exists for the PoC |
+| Q-001 | Is the `eu` jurisdiction available for SQLite-backed Durable Objects on the Cloudflare **Workers Free** plan? If not, the PoC either accepts non-EU DO placement with test-only data or the commercial phase moves to Workers Paid earlier. Verify in MILESTONE-01. | Architect / Owner | **Resolved (2026-09-10)** — YES. Verified against the deployed worker on the Free plan: `/__diag/jurisdiction` → `{"ok":true}`, DO namespace is SQLite-backed. DO half of NFR-007 met; no Workers Paid needed. See `openspec/changes/scaffold-infra-wiring/proposal.md`. |
 | Q-002 | Domain name. The spec uses a placeholder host for `/e/:code` links and Supabase Auth emails. A domain must be registered before any test outside the owner's own devices. | Product owner | Open (REQ Q-13) |
 | Q-003 | Image moderation and profile/team **photo** upload are deferred for the PoC (names only). Confirm photo upload is fully disabled rather than admin-review-only. | Product owner | Open — assumed disabled (REQ Q-4) |
 | Q-004 | Pre-event on-demand Postgres backup cadence and acceptable RPO for the commercial phase. Not required for the PoC. | Architect / Owner | Deferred (REQ Q-10) |
