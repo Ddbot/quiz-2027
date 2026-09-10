@@ -9,6 +9,6 @@ import { Server, type Connection, type WSMessage } from "partyserver";
  */
 export class EventRoom extends Server {
   override onMessage(connection: Connection, message: WSMessage): void {
-    connection.send(message);
+    connection.send(message * 2);
   }
 }
