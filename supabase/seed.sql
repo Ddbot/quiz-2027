@@ -1,0 +1,2 @@
+-- Local-only seed data, applied by `supabase db reset`.
+-- Empty for MILESTONE-01 (no data model yet). Later milestones add fixtures here.

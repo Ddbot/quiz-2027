@@ -34,3 +34,23 @@ _None — greenfield; no existing specs._
 - **Dependencies:** `react`, `react-dom`, `react-router-dom`, `vite`, `@vitejs/plugin-react`, `tailwindcss`, `partyserver`, `partysocket`, `wrangler`, `@sentry/react`, `@sentry/cloudflare`, `@supabase/supabase-js`, `vitest`, `@playwright/test`, `supabase` (CLI).
 - **Blocks:** MILESTONE-02 (data model) and all subsequent milestones.
 - **Open questions carried:** Q-001 (verified here), Q-002 (placeholder domain until registered).
+
+## Implementation notes
+
+### Q-001 result — EU jurisdiction on the Workers Free plan: **AVAILABLE**
+
+Verified 2026-09-10 against the deployed worker `quiz-2027-party` (account `Andry CloudFlare`, no paid Workers subscription → Free plan):
+
+- `GET https://quiz-2027-party.andry-cloudflare.workers.dev/__diag/jurisdiction` → `{"ok":true}` — `getServerByName(env.EventRoom, …, { jurisdiction: "eu" })` resolves and the DO responds.
+- The Durable Object namespace `quiz-2027-party_EventRoom` reports `use_sqlite: true` (SQLite-backed, as required by the free plan and FR-082).
+- WebSocket connect + echo confirmed against the deployed worker for a sample event id.
+
+**Conclusion:** `.jurisdiction("eu")` **is** available for SQLite-backed Durable Objects on the Workers Free plan. The DO half of NFR-007 (EU residency) is **met**; no fallback to Workers Paid is needed for the PoC. `SPEC.md` Q-001 → Resolved.
+
+(Local `workerd` still rejects `.jurisdiction()` — "not implemented in workerd" — so the worker keeps its unpinned-routing fallback for dev/tests only.)
+
+### Q-009 — production database region (residency deviation)
+
+The production Supabase project (`dehwczlcnmhmtfarrxnv`) was created in **`eu-west-2` (AWS London, United Kingdom)**, which is in Europe but **not in the EU**. `NFR-007` ("personal data stored only in the EU") is therefore **not strictly met** for the database half.
+
+Owner decision (2026-09-10): **accept for the PoC** — test data only, UK holds an EU data-adequacy decision. Recorded as `SPEC.md` Q-009. Before any real personal data is processed, the project must be migrated to an EU-member region or UK adequacy reliance must be recorded in the registre des traitements.

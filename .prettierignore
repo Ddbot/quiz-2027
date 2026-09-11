@@ -6,4 +6,6 @@ coverage
 pnpm-lock.yaml
 supabase/.branches
 supabase/.temp
+supabase/migrations
 CHANGELOG.md
+*.sql
