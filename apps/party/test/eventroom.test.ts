@@ -33,8 +33,8 @@ describe("EventRoom", () => {
     expect(await roundtrip(b, "from-b")).toBe("from-b");
 
     // Both connections landed on the same Durable Object instance for event "E".
-    // (workerd has no jurisdiction support, so routing resolves unpinned here —
-    // the EU pin is exercised on the real platform via /__diag/jurisdiction.)
+    // (workerd has no jurisdiction support, so routing resolves unpinned here.
+    // On the deployed worker the EU pin succeeds — see SPEC.md Q-001, resolved.)
     const stub = await getServerByName<Env, EventRoom>(env.EventRoom, "E");
     await runInDurableObject(stub, (instance) => {
       expect([...instance.getConnections()].length).toBe(2);
@@ -44,13 +44,8 @@ describe("EventRoom", () => {
     b.close();
   });
 
-  it("reports jurisdiction support status on the diagnostic route", async () => {
-    const res = await SELF.fetch("https://example.com/__diag/jurisdiction");
-    const body = (await res.json()) as { ok: boolean; error?: string };
-
-    // Locally this is always `false` ("not implemented in workerd"); on the
-    // deployed worker it answers Q-001 for the target plan.
-    expect(typeof body.ok).toBe("boolean");
-    if (!body.ok) expect(body.error).toMatch(/jurisdiction/i);
+  it("returns 404 for a request that doesn't match any party route", async () => {
+    const res = await SELF.fetch("https://example.com/not-a-route");
+    expect(res.status).toBe(404);
   });
 });

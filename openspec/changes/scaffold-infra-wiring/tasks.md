@@ -15,15 +15,15 @@
 
 - [x] 3.1 Scaffold Vite + React 18 + TS in `apps/web`; add Tailwind and shadcn/ui (`components.json`, CSS variables, slate base) and one generated `Button` component. Verify `pnpm --filter web dev` serves and `pnpm --filter web build` produces `dist/`.
 - [x] 3.2 Add `react-router-dom` with routes `/e/:joinCode` (player placeholder, reads and displays the join code), `/admin/*` (admin placeholder), `/screen/:eventId` (big-screen placeholder shell, reads the event id). Verify a Vitest + Testing Library test renders each route and asserts the URL param is shown.
-- [ ] 3.3 Add a `VITE_PARTY_HOST` env binding and a dev-only "ping" widget on `/screen/:eventId` that opens a `partysocket` connection for the event id, sends `"hello"`, and displays the echoed reply. Verify against a locally running worker (`wrangler dev`) that the echo appears.
+- [x] 3.3 Add a `VITE_PARTY_HOST` env binding and a dev-only "ping" widget on `/screen/:eventId` that opens a `partysocket` connection for the event id, sends `"hello"`, and displays the echoed reply. Verify against a locally running worker (`wrangler dev`) that the echo appears. — Verified against the **deployed** worker instead (equally valid, stronger signal): `pnpm --filter web dev` + `VITE_PARTY_HOST` pointed at `quiz-2027-party.andry-cloudflare.workers.dev`; `/screen/test-event` showed `ping → hello` in a real browser. Confirmed tree-shaken out of the production build (dev-only).
 - [ ] 3.4 Add responsive viewport meta and a minimal high-contrast base theme for `/screen`. Verify the player and screen placeholders load in iOS Safari and Android Chrome (BrowserStack or a real device), and admin/screen in desktop Chrome and Edge; record which was used in the PR.
 
 ## 4. Real-time worker (`apps/party`)
 
 - [x] 4.1 Scaffold `apps/party` as a Cloudflare Worker with `partyserver`; add `wrangler.jsonc` declaring an `EventRoom` class as a SQLite-backed Durable Object (`migrations` with `new_sqlite_classes: ["EventRoom"]`), `compatibility_date`, and `compatibility_flags` as needed. Verify `pnpm --filter party exec wrangler deploy --dry-run` succeeds.
 - [x] 4.2 Implement `EventRoom` extending `partyserver`'s `Server`: on WebSocket message, echo the text back to the sender; no auth, no state. Route requests by event id, deriving the stub from a namespace handle obtained via `.jurisdiction("eu")`. Verify a Vitest + `@cloudflare/vitest-pool-workers` test: two clients for event `E` connect, each echo works, and both are shown to hit one instance.
-- [ ] 4.3 Add a temporary diagnostic route `GET /__diag/jurisdiction` that instantiates an `EventRoom` stub through the `eu` namespace and returns `{ ok: true }` or the error. Verify it returns `ok:true` under `wrangler dev`.
-- [ ] 4.4 Add `withSentry` (`@sentry/cloudflare`) around the worker fetch handler, DSN from a secret, no-op when absent. Verify a forced throw on a `/__diag/boom` route is captured locally (or in the Sentry project after deploy).
+- [x] 4.3 Add a temporary diagnostic route `GET /__diag/jurisdiction` that instantiates an `EventRoom` stub through the `eu` namespace and returns `{ ok: true }` or the error. Verify it returns `ok:true` under `wrangler dev`. — Under `wrangler dev`/local `workerd`, jurisdiction is unimplemented (`ok:false`, documented limitation — see design D8 "the only trustworthy test is the real platform"). Verified `ok:true` on the **deployed** worker instead, which is the test that actually resolves Q-001. Route removed in task 8.3.
+- [x] 4.4 Add `withSentry` (`@sentry/cloudflare`) around the worker fetch handler, DSN from a secret, no-op when absent. Verify a forced throw on a `/__diag/boom` route is captured locally (or in the Sentry project after deploy). — `SENTRY_DSN` set via `wrangler secret put`; `/__diag/boom` on the deployed worker returned HTTP 500 and the error appeared in the `quiz-2027-party` Sentry project (owner-confirmed). Route removed in task 8.3.
 
 ## 5. Supabase project (`supabase/`)
 
@@ -48,13 +48,13 @@
 
 - [x] 8.1 After the first production worker deploy, call `/__diag/jurisdiction` against the deployed worker on the target (free) plan. Record `ok` or the exact error in `proposal.md` (append a "Q-001 result" note) and in the PR description. — `{"ok":true}` on the Free plan; recorded in `proposal.md` + PR #1 description.
 - [x] 8.2 Update `SPEC.md` Q-001 status (Resolved / or Open with the recorded limitation and the residency requirement marked unmet pending an owner plan decision). If unmet, open a follow-up note for the owner. — Q-001 → **Resolved (available)**; NFR-007 DO half met.
-- [ ] 8.3 Remove the `/__diag/*` routes from `apps/party`. Verify `wrangler deploy --dry-run` still passes and no `__diag` string remains in the source. — **deferred until Sentry error test (9.4) uses `/__diag/boom`.**
+- [x] 8.3 Remove the `/__diag/*` routes from `apps/party`. Verify `wrangler deploy --dry-run` still passes and no `__diag` string remains in the source. — routes removed, test updated; `typecheck`/`lint`/`test`/`build --dry-run` all green; no `__diag` string in `src/` or `test/`. — **deferred until Sentry error test (9.4) uses `/__diag/boom`.**
 
 ## 9. Milestone acceptance verification
 
 - [ ] 9.1 End-to-end check against production: merge a trivial change to `apps/web` and confirm Vercel auto-publishes it; merge a trivial change to `apps/party` and confirm the Action redeploys it. (SPEC.md MILESTONE-01 AC1)
-- [ ] 9.2 From a browser, open a WebSocket to the deployed worker for a sample event id, send a message, and confirm the echo. (AC2)
+- [x] 9.2 From a browser, open a WebSocket to the deployed worker for a sample event id, send a message, and confirm the echo. (AC2) — `/screen/test-event` (local dev, `VITE_PARTY_HOST` → deployed worker) showed `ping → hello` in a real browser (owner-confirmed).
 - [x] 9.3 Confirm the `EventRoom` namespace is created with `jurisdiction: "eu"` in the source and — per task 8.1 — that creation succeeded on the target plan, or that the exception is documented. (AC3) — source: `apps/party/src/index.ts` `JURISDICTION = "eu"` passed to `routePartykitRequest` + `getServerByName`; creation on Free plan confirmed (`/__diag/jurisdiction` ok, DO ns `use_sqlite: true`).
-- [ ] 9.4 Trigger one error in the web app and one in the worker; confirm both appear in Sentry. (AC4)
+- [ ] 9.4 Trigger one error in the web app and one in the worker; confirm both appear in Sentry. (AC4) — **worker half done**: `/__diag/boom` error confirmed in the `quiz-2027-party` Sentry project. Web half pending.
 - [ ] 9.5 Review billing on Supabase, Vercel, Cloudflare, and Sentry; confirm every service is on a free plan. (NFR-013)
 - [ ] 9.6 Tag the merge commit `m01-scaffold`.

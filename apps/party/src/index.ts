@@ -1,5 +1,5 @@
 import { withSentry } from "@sentry/cloudflare";
-import { getServerByName, routePartykitRequest } from "partyserver";
+import { routePartykitRequest } from "partyserver";
 
 import { EventRoom } from "./EventRoom";
 
@@ -8,6 +8,7 @@ export { EventRoom };
 /**
  * Every per-event Durable Object is created through the EU jurisdiction so its
  * state stays in the European Union (platform-foundation residency requirement).
+ * Confirmed available on the Workers Free plan (SPEC.md Q-001, resolved).
  */
 const JURISDICTION = "eu" as const;
 
@@ -20,9 +21,8 @@ function isJurisdictionUnsupported(error: unknown): boolean {
  * Route a request to its EventRoom, pinning the object to the EU jurisdiction.
  *
  * Locally, workerd rejects `.jurisdiction()`, so we fall back to unpinned
- * routing to keep dev and tests working. On production that fallback would mean
- * the residency guarantee is not met — which is exactly what
- * `GET /__diag/jurisdiction` probes and reports for Q-001.
+ * routing to keep dev and tests working. On the deployed worker jurisdiction
+ * pinning succeeds (verified — Q-001).
  */
 async function routeToEventRoom(request: Request, env: Env): Promise<Response | null> {
   try {
@@ -37,22 +37,6 @@ async function routeToEventRoom(request: Request, env: Env): Promise<Response | 
 
 const handler = {
   async fetch(request, env): Promise<Response> {
-    const url = new URL(request.url);
-
-    // --- Temporary Q-001 diagnostics — removed in task 8.3 -------------------
-    if (url.pathname === "/__diag/jurisdiction") {
-      try {
-        await getServerByName(env.EventRoom, "__diag", { jurisdiction: JURISDICTION });
-        return Response.json({ ok: true });
-      } catch (error) {
-        return Response.json({ ok: false, error: String(error) }, { status: 500 });
-      }
-    }
-    if (url.pathname === "/__diag/boom") {
-      throw new Error("Intentional diagnostic error from /__diag/boom");
-    }
-    // --- end diagnostics ----------------------------------------------------
-
     const routed = await routeToEventRoom(request, env);
     return routed ?? new Response("Not found", { status: 404 });
   },
