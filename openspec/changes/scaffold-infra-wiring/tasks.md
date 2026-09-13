@@ -56,5 +56,5 @@
 - [x] 9.2 From a browser, open a WebSocket to the deployed worker for a sample event id, send a message, and confirm the echo. (AC2) — `/screen/test-event` (local dev, `VITE_PARTY_HOST` → deployed worker) showed `ping → hello` in a real browser (owner-confirmed).
 - [x] 9.3 Confirm the `EventRoom` namespace is created with `jurisdiction: "eu"` in the source and — per task 8.1 — that creation succeeded on the target plan, or that the exception is documented. (AC3) — source: `apps/party/src/index.ts` `JURISDICTION = "eu"` passed to `routePartykitRequest` + `getServerByName`; creation on Free plan confirmed (`/__diag/jurisdiction` ok, DO ns `use_sqlite: true`).
 - [ ] 9.4 Trigger one error in the web app and one in the worker; confirm both appear in Sentry. (AC4) — **worker half done**: `/__diag/boom` error confirmed in the `quiz-2027-party` Sentry project. Web half pending.
-- [ ] 9.5 Review billing on Supabase, Vercel, Cloudflare, and Sentry; confirm every service is on a free plan. (NFR-013)
+- [x] 9.5 Review billing on Supabase, Vercel, Cloudflare, and Sentry; confirm every service is on a free plan. (NFR-013) — owner confirmed all four on a free plan, no charges.
 - [ ] 9.6 Tag the merge commit `m01-scaffold`.
