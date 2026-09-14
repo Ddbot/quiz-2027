@@ -1,13 +1,34 @@
 import { render, screen } from "@testing-library/react";
 import { MemoryRouter } from "react-router-dom";
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 
-import { App } from "@/App";
+const { getSession, onAuthStateChange } = vi.hoisted(() => ({
+  getSession: vi.fn(),
+  onAuthStateChange: vi.fn(),
+}));
+
+vi.mock("@/lib/supabase", () => ({
+  supabase: {
+    auth: { getSession, onAuthStateChange },
+    // Never resolves in this file — these tests only care about routes that
+    // don't depend on the join-code resolution outcome. PlayerRoute.test.tsx
+    // covers the resolved/invalid states.
+    from: () => ({ select: () => ({ eq: () => ({ maybeSingle: () => new Promise(() => {}) }) }) }),
+  },
+}));
+
+getSession.mockResolvedValue({ data: { session: null } });
+onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } });
+
+const { App } = await import("@/App");
+const { AuthProvider } = await import("@/components/AuthProvider");
 
 function renderAt(path: string) {
   return render(
     <MemoryRouter initialEntries={[path]}>
-      <App />
+      <AuthProvider>
+        <App />
+      </AuthProvider>
     </MemoryRouter>,
   );
 }

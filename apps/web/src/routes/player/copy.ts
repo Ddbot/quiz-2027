@@ -1,0 +1,101 @@
+// Onboarding flow copy, FR/EN, selected by the event's `language` column
+// (design.md D5 — a small local dictionary rather than a full i18n framework;
+// player + big-screen surfaces are FR/EN per event, per project convention).
+// Before an event is resolved (or on an invalid code), there's no `language`
+// to key off yet, so `getPlayerCopy` defaults to French.
+
+export const playerCopy = {
+  fr: {
+    heading: "Quiz 2027",
+    resolving: "Recherche de l'événement…",
+    invalidCodeTitle: "Code introuvable",
+    invalidCodeBody: "Ce code ne correspond à aucun événement disponible.",
+
+    identityChooseMode: "Comment souhaitez-vous participer ?",
+    modeAnonymous: "Invité (sans compte)",
+    modeCreateAccount: "Créer un compte",
+    modeSignIn: "Se connecter",
+
+    displayNameLabel: "Nom affiché",
+    emailLabel: "Adresse e-mail",
+    passwordLabel: "Mot de passe",
+
+    over16Label: "J'ai plus de 16 ans",
+    tosLabel: "J'accepte les Conditions d'utilisation et la Politique de confidentialité",
+    termsLinkText: "Conditions d'utilisation",
+    privacyLinkText: "Politique de confidentialité",
+    marketingLabel: "Je souhaite recevoir des actualités par e-mail (facultatif)",
+    consentRequired: "Ces deux cases sont obligatoires pour continuer.",
+
+    continueButton: "Continuer",
+    signInButton: "Se connecter",
+
+    checkEmailTitle: "Vérifiez votre e-mail",
+    checkEmailBody: "Un lien de confirmation vient de vous être envoyé. Cliquez dessus pour continuer.",
+
+    nameConfirmTitle: "Ce nom est permanent",
+    nameConfirmBody:
+      "Une fois confirmé, ce nom ne pourra plus être modifié pour cet événement. Vérifiez qu'il vous convient.",
+    nameConfirmButton: "Confirmer et rejoindre",
+    nameConfirmBack: "Retour",
+
+    joining: "Connexion en cours…",
+    joinedTitle: "Vous avez rejoint l'événement",
+
+    errorProfanity: "Ce nom n'est pas autorisé. Merci d'en choisir un autre.",
+    errorInvalidCode: "Ce code ne correspond à aucun événement disponible.",
+    errorEventNotJoinable: "Cet événement est terminé et n'accepte plus de nouveaux joueurs.",
+    errorGeneric: "Une erreur est survenue. Merci de réessayer.",
+    retryButton: "Réessayer",
+  },
+  en: {
+    heading: "Quiz 2027",
+    resolving: "Looking up the event…",
+    invalidCodeTitle: "Code not found",
+    invalidCodeBody: "That code doesn't match any joinable event.",
+
+    identityChooseMode: "How would you like to join?",
+    modeAnonymous: "Guest (no account)",
+    modeCreateAccount: "Create an account",
+    modeSignIn: "Sign in",
+
+    displayNameLabel: "Display name",
+    emailLabel: "Email address",
+    passwordLabel: "Password",
+
+    over16Label: "I am over 16 years old",
+    tosLabel: "I accept the Terms of Service and Privacy Policy",
+    termsLinkText: "Terms of Service",
+    privacyLinkText: "Privacy Policy",
+    marketingLabel: "I'd like to receive news by email (optional)",
+    consentRequired: "Both boxes are required to continue.",
+
+    continueButton: "Continue",
+    signInButton: "Sign in",
+
+    checkEmailTitle: "Check your email",
+    checkEmailBody: "We just sent you a confirmation link. Click it to continue.",
+
+    nameConfirmTitle: "This name is permanent",
+    nameConfirmBody:
+      "Once confirmed, this name cannot be changed for this event. Make sure you're happy with it.",
+    nameConfirmButton: "Confirm and join",
+    nameConfirmBack: "Back",
+
+    joining: "Joining…",
+    joinedTitle: "You've joined the event",
+
+    errorProfanity: "That name isn't allowed. Please choose another one.",
+    errorInvalidCode: "That code doesn't match any joinable event.",
+    errorEventNotJoinable: "This event has ended and is no longer accepting new players.",
+    errorGeneric: "Something went wrong. Please try again.",
+    retryButton: "Retry",
+  },
+} as const;
+
+export type PlayerLanguage = keyof typeof playerCopy;
+export type PlayerCopy = (typeof playerCopy)[PlayerLanguage];
+
+export function getPlayerCopy(language: PlayerLanguage | null | undefined): PlayerCopy {
+  return playerCopy[language ?? "fr"];
+}
