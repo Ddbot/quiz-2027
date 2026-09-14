@@ -72,7 +72,10 @@ per-PR previews (if enabled) point at the production backend services.
 
 - **web** → Vercel Git integration. Root Directory `apps/web`, Vite preset. Auto-deploys on merge to `main`.
 - **party** → `.github/workflows/deploy-worker.yml` runs `wrangler deploy` on merge to `main` touching `apps/party` or `packages/shared`.
-- **schema** → `supabase db push`, run manually for now.
+- **schema** → `supabase db push`, run manually for now. This includes Storage bucket
+  creation (e.g. `event-media`, MILESTONE-04) — buckets and their access policies are
+  defined in migrations like any other schema object, so unlike the Auth toggles below
+  there is no separate manual dashboard step to create them in production.
 
 ### Production-only dashboard settings
 
