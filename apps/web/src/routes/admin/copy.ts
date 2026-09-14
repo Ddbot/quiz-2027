@@ -1,0 +1,76 @@
+// Admin console copy — French only, no `en` variant (project convention: the
+// admin console is French-only; only player + big-screen surfaces are FR/EN
+// per event — see apps/web/src/routes/player/copy.ts for that pattern).
+
+export const adminCopy = {
+  heading: "Console d'administration",
+
+  signInTitle: "Connexion",
+  emailLabel: "Adresse e-mail",
+  passwordLabel: "Mot de passe",
+  signInButton: "Se connecter",
+  signInError: "Identifiants invalides ou compte introuvable.",
+
+  forbiddenTitle: "Accès refusé",
+  forbiddenBody: "Ce compte n'a pas les droits d'administration.",
+  signOutButton: "Se déconnecter",
+
+  eventListTitle: "Événements",
+  noEvents: "Aucun événement pour le moment.",
+  statusDraft: "Brouillon",
+  statusLive: "En direct",
+  statusEnded: "Terminé",
+
+  newEventTitle: "Nouvel événement",
+  titleLabel: "Titre",
+  languageLabel: "Langue de l'événement",
+  languageFr: "Français",
+  languageEn: "Anglais",
+  venueLabel: "Lieu (facultatif)",
+  createButton: "Créer",
+  createError: "La création de l'événement a échoué. Merci de réessayer.",
+
+  eventEditorBack: "Retour aux événements",
+  saveButton: "Enregistrer",
+  saveError: "L'enregistrement a échoué. Merci de réessayer.",
+  deleteButton: "Supprimer l'événement",
+  deleteConfirm: "Supprimer définitivement cet événement et son contenu ?",
+  deleteError: "La suppression a échoué. Merci de réessayer.",
+  readOnlyNotice: "Cet événement n'est plus un brouillon : son contenu est en lecture seule.",
+  editRejected: "Cet événement ne peut plus être modifié.",
+
+  joinCodeTitle: "Code et QR",
+  joinCodeLabel: "Code de connexion",
+
+  stepsTitle: "Étapes",
+  addStepButton: "Ajouter une étape",
+  noSteps: "Aucune étape pour le moment.",
+  removeStepButton: "Supprimer",
+  moveStepUp: "Monter",
+  moveStepDown: "Descendre",
+  editStepButton: "Modifier",
+
+  waitingScreenTitle: "Écran d'attente",
+  waitingImageLabel: "Image (facultatif)",
+  waitingImageUploadButton: "Téléverser",
+  waitingImageError: "Le fichier doit être une image.",
+  waitingImageUploadError: "Le téléversement a échoué. Merci de réessayer.",
+  countdownTargetLabel: "Compte à rebours jusqu'à (facultatif)",
+
+  stepEditorTitle: "Étape",
+  stepEditorBack: "Retour à l'événement",
+  questionLabel: "Question",
+  optionsTitle: "Options de réponse",
+  optionLabel: "Option",
+  addOptionButton: "Ajouter une option",
+  removeOptionButton: "Retirer",
+  correctOptionLabel: "Bonne réponse",
+  optionsMinError: "Au moins deux options sont requises.",
+  correctOptionRequiredError: "Merci de désigner la bonne réponse.",
+  timedLabel: "Étape chronométrée",
+  countdownSecondsLabel: "Durée du compte à rebours (secondes)",
+  pointsCorrectLabel: "Points pour une bonne réponse",
+  teamAwardPointsLabel: "Points bonus pour l'équipe gagnante",
+} as const;
+
+export type AdminCopy = typeof adminCopy;
