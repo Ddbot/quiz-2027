@@ -3,6 +3,8 @@
 // (enforced by eslint no-restricted-imports and scripts/check-shared-isolation.mjs).
 
 export * from "./types.js";
+export * from "./room.js";
+export * from "./protocol.js";
 
 /** Package identity marker, used by scaffold wiring tests. */
 export const packageName = "@quiz/shared" as const;

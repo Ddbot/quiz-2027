@@ -24,6 +24,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # @quiz/shared's dist/ is gitignored and untracked (built output), so a
+      # fresh checkout has none — typecheck of any consuming package (e.g.
+      # apps/party, since MILESTONE-05) needs it to exist first. `pnpm build`
+      # alone respects workspace topological order and would build it before
+      # any dependent, but Typecheck runs before the full Build step below.
+      - name: Build shared package
+        run: pnpm --filter @quiz/shared build
+
       - name: Typecheck
         run: pnpm typecheck
 
@@ -39,7 +47,7 @@ jobs:
       - name: Start local Supabase
         run: pnpm exec supabase start
 
-      - name: Configure tools/db env
+      - name: Configure tools/db and apps/party env
         run: |
           # `supabase status -o env` mixes diagnostic lines (e.g. "Stopped
           # services: [...]") in with the KEY="value" ones — filter to the
@@ -50,6 +58,17 @@ jobs:
             echo "SUPABASE_ANON_KEY=$PUBLISHABLE_KEY"
             echo "SUPABASE_SERVICE_ROLE_KEY=$SECRET_KEY"
           } >> "$GITHUB_ENV"
+          # apps/party's test suite (since MILESTONE-05) connects to the
+          # EventRoom Durable Object with real signed-in Supabase users and
+          # needs these as worker secrets, not shell env — `.dev.vars` is the
+          # local/CI equivalent of `wrangler secret put` (gitignored, never
+          # committed; see apps/party/.dev.vars.example).
+          {
+            echo "SENTRY_DSN="
+            echo "SUPABASE_URL=$API_URL"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SECRET_KEY"
+            echo "SUPABASE_JWKS_URL=$API_URL/auth/v1/.well-known/jwks.json"
+          } > apps/party/.dev.vars
 
       - name: Test
         run: pnpm test

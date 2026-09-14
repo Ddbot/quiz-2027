@@ -15,6 +15,8 @@
   "dependencies": {
     "@quiz/shared": "workspace:*",
     "@sentry/cloudflare": "^10.74.0",
+    "@supabase/supabase-js": "^2.116.0",
+    "jose": "^6.2.12",
     "partyserver": "^0.5.10"
   },
   "devDependencies": {
