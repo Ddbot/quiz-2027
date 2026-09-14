@@ -57,4 +57,4 @@
 - [x] 9.3 Confirm the `EventRoom` namespace is created with `jurisdiction: "eu"` in the source and — per task 8.1 — that creation succeeded on the target plan, or that the exception is documented. (AC3) — source: `apps/party/src/index.ts` `JURISDICTION = "eu"` passed to `routePartykitRequest` + `getServerByName`; creation on Free plan confirmed (`/__diag/jurisdiction` ok, DO ns `use_sqlite: true`).
 - [x] 9.4 Trigger one error in the web app and one in the worker; confirm both appear in Sentry. (AC4) — worker: `/__diag/boom` error confirmed in `quiz-2027-party`. Web: an uncaught `setTimeout` throw on the production site confirmed in `quiz-2027-web` (owner's normal browser profile silently blocked the ingest request via an ad-blocker; confirmed clean in an Incognito window — noted as a known real-world limitation, not a wiring defect).
 - [x] 9.5 Review billing on Supabase, Vercel, Cloudflare, and Sentry; confirm every service is on a free plan. (NFR-013) — owner confirmed all four on a free plan, no charges.
-- [ ] 9.6 Tag the merge commit `m01-scaffold`.
+- [x] 9.6 Tag the merge commit `m01-scaffold`. — tag `m01-scaffold` pushed at `8203c32` (main).
