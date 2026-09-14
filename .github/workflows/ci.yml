@@ -47,7 +47,7 @@ jobs:
       - name: Start local Supabase
         run: pnpm exec supabase start
 
-      - name: Configure tools/db env
+      - name: Configure tools/db and apps/party env
         run: |
           # `supabase status -o env` mixes diagnostic lines (e.g. "Stopped
           # services: [...]") in with the KEY="value" ones — filter to the
@@ -58,6 +58,17 @@ jobs:
             echo "SUPABASE_ANON_KEY=$PUBLISHABLE_KEY"
             echo "SUPABASE_SERVICE_ROLE_KEY=$SECRET_KEY"
           } >> "$GITHUB_ENV"
+          # apps/party's test suite (since MILESTONE-05) connects to the
+          # EventRoom Durable Object with real signed-in Supabase users and
+          # needs these as worker secrets, not shell env — `.dev.vars` is the
+          # local/CI equivalent of `wrangler secret put` (gitignored, never
+          # committed; see apps/party/.dev.vars.example).
+          {
+            echo "SENTRY_DSN="
+            echo "SUPABASE_URL=$API_URL"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SECRET_KEY"
+            echo "SUPABASE_JWKS_URL=$API_URL/auth/v1/.well-known/jwks.json"
+          } > apps/party/.dev.vars
 
       - name: Test
         run: pnpm test
