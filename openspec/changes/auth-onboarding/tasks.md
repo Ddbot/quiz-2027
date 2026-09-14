@@ -31,7 +31,7 @@
 ## 6. `tools/db`: RPC and confirmation-flow tests
 
 - [x] 6.1 Vitest suite for `join_event` covering every scenario in `specs/data-model/spec.md`'s new requirement: valid join, idempotent re-join, invalid code, `ended`-event rejection, profanity rejection, and the direct-insert-denied regression. Verify `pnpm --filter db test` passes. — 28/28 (7 new + 21 existing). Found and fixed a real cross-file fixture collision: the "at most one live event" constraint is a genuinely global resource, so both `rls.test.ts` and this suite now release their `live` event fixture in `afterAll`.
-- [ ] 6.2 Add a Mailpit-based helper (fetches a test account's confirmation email via `MAILPIT_URL`'s HTTP API, extracts and follows the verification link) and a test proving a signed-up account has no session until confirmed, and a usable session after (design D4). Verify `pnpm --filter db test` passes including this case.
+- [x] 6.2 Add a Mailpit-based helper (fetches a test account's confirmation email via `MAILPIT_URL`'s HTTP API, extracts and follows the verification link) and a test proving a signed-up account has no session until confirmed, and a usable session after (design D4). Verify `pnpm --filter db test` passes including this case. — `tools/db/src/mailpit.ts` + `test/emailConfirmation.test.ts` (34/34 total). Confirmed empirically before writing the test: pre-confirmation sign-in returns `400 email_not_confirmed`; the emailed link redirects with `access_token`/`refresh_token` in the fragment (Node's `fetch({redirect:"manual"})` correctly exposes the `Location` header server-side, unlike a browser's opaque-redirect restriction).
 
 ## 7. CI and production rollout
 
