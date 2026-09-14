@@ -52,7 +52,16 @@ grant execute on function public.is_profane(text) to authenticated, service_role
 -- `participant` row. See openspec/changes/auth-onboarding/specs/data-model/spec.md.
 -- =============================================================================
 
-create function public.join_event(p_join_code text, p_display_name text)
+-- p_over16_ack / p_marketing_consent are NULL for a returning identity that
+-- has already consented (the UI doesn't re-collect or resend them then); when
+-- non-null, this is a first-time consent to record on `profile` (task 1.2 —
+-- proposal.md already committed to this; the original signature omitted it).
+create function public.join_event(
+  p_join_code text,
+  p_display_name text,
+  p_over16_ack boolean default null,
+  p_marketing_consent boolean default null
+)
 returns jsonb
 language plpgsql
 security definer
@@ -79,6 +88,14 @@ begin
 
   if public.is_profane(p_display_name) then
     raise exception 'profanity' using errcode = 'P0001';
+  end if;
+
+  if p_over16_ack is not null then
+    update public.profile
+      set over16_ack = p_over16_ack,
+          tos_accepted_at = now(),
+          marketing_consent = coalesce(p_marketing_consent, false)
+      where id = auth.uid();
   end if;
 
   select * into v_participant
@@ -113,8 +130,8 @@ $$;
 -- anon (unauthenticated) is excluded; both anonymous *sign-in* and account
 -- sessions carry role=authenticated in Supabase, so this covers both — see
 -- design D1.
-revoke all on function public.join_event(text, text) from public, anon;
-grant execute on function public.join_event(text, text) to authenticated;
+revoke all on function public.join_event(text, text, boolean, boolean) from public, anon;
+grant execute on function public.join_event(text, text, boolean, boolean) to authenticated;
 
 -- =============================================================================
 -- 3. Public event summary (task 1.4, design D6)

@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 
 import { supabase } from "@/lib/supabase";
 import { getPlayerCopy } from "@/routes/player/copy";
+import { OnboardingFlow } from "@/routes/player/OnboardingFlow";
 import type { EventSummary } from "@/routes/player/types";
 
 type ResolveState =
@@ -87,12 +88,15 @@ export function PlayerRoute() {
 
   const copy = getPlayerCopy(resolve.event.language);
   return (
-    <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center justify-center gap-4 p-6 text-center">
+    <main className="mx-auto flex min-h-dvh max-w-md flex-col items-center gap-4 p-6 text-center">
       <h1 className="text-2xl font-semibold">{copy.heading}</h1>
-      <p className="text-muted-foreground" data-testid="join-code">
+      <p className="sr-only" data-testid="join-code">
         {joinCode}
       </p>
-      <p data-testid="event-title">{resolve.event.title}</p>
+      <p className="text-muted-foreground" data-testid="event-title">
+        {resolve.event.title}
+      </p>
+      <OnboardingFlow event={resolve.event} />
     </main>
   );
 }

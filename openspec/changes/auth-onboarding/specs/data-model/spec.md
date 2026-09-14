@@ -2,12 +2,17 @@
 
 ### Requirement: `join_event` is the sole path for a player to create their own participant row
 
-The system SHALL expose a server-side operation, callable by any authenticated identity (anonymous or account), that validates a join code, checks the requested display name against the profanity wordlist, and creates — or idempotently returns — the caller's `participant` row for that event. No other path SHALL let a non-admin identity insert a `participant` row directly.
+The system SHALL expose a server-side operation, callable by any authenticated identity (anonymous or account), that validates a join code, checks the requested display name against the profanity wordlist, and creates — or idempotently returns — the caller's `participant` row for that event. No other path SHALL let a non-admin identity insert a `participant` row directly. When the caller is consenting for the first time, the same operation SHALL record that consent (16+ affirmation and Terms/Privacy acceptance timestamp) and the marketing-consent choice against the caller's `profile`.
 
 #### Scenario: Valid join creates a participant
 
 - **WHEN** an authenticated identity calls the join operation with a join code that resolves to a joinable event and an acceptable display name
 - **THEN** a `participant` row is created for that identity and event, and is returned
+
+#### Scenario: First-time consent is recorded on the profile
+
+- **WHEN** the join operation is called with the age affirmation and Terms/Privacy acceptance for an identity that has not consented before
+- **THEN** the caller's `profile` records the 16+ affirmation, a Terms/Privacy acceptance timestamp, and the marketing-consent choice
 
 #### Scenario: Repeated join is idempotent
 

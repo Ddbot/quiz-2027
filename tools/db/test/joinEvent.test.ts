@@ -41,6 +41,45 @@ describe("join_event", () => {
     await admin.from("event").delete().eq("id", liveEvent.id);
   });
 
+  it("records first-time consent on the profile", async () => {
+    const consentPlayer = await createPlayer("consent-player");
+    const client = createUserClient(consentPlayer.accessToken);
+    const { error } = await client.rpc("join_event", {
+      p_join_code: draftEvent.join_code,
+      p_display_name: "ConsentTester",
+      p_over16_ack: true,
+      p_marketing_consent: false,
+    });
+    expect(error).toBeNull();
+
+    const profile = await admin
+      .from("profile")
+      .select("over16_ack, marketing_consent, tos_accepted_at")
+      .eq("id", consentPlayer.profileId)
+      .single();
+    expect(profile.data?.over16_ack).toBe(true);
+    expect(profile.data?.marketing_consent).toBe(false);
+    expect(profile.data?.tos_accepted_at).not.toBeNull();
+  });
+
+  it("leaves consent fields untouched when not provided (returning identity)", async () => {
+    const returningPlayer = await createPlayer("returning-player");
+    const client = createUserClient(returningPlayer.accessToken);
+    const { error } = await client.rpc("join_event", {
+      p_join_code: draftEvent.join_code,
+      p_display_name: "Returning",
+    });
+    expect(error).toBeNull();
+
+    const profile = await admin
+      .from("profile")
+      .select("over16_ack, tos_accepted_at")
+      .eq("id", returningPlayer.profileId)
+      .single();
+    expect(profile.data?.over16_ack).toBe(false);
+    expect(profile.data?.tos_accepted_at).toBeNull();
+  });
+
   it("creates a participant for a valid join code (draft event)", async () => {
     const client = createUserClient(player.accessToken);
     const { data, error } = await client.rpc("join_event", {
