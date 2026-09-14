@@ -1,5 +1,11 @@
 # apps/party — local worker secrets. Copy to `.dev.vars` for `wrangler dev`.
 # In production these are set with `wrangler secret put <NAME>` (never committed).
+#
+# SUPABASE_URL/SUPABASE_SERVICE_ROLE_KEY/SUPABASE_JWKS_URL are load-bearing
+# since MILESTONE-05 (EventRoom JWT verification + role resolution). For the
+# local Supabase stack (`supabase start`), the values match tools/db/.env,
+# and SUPABASE_JWKS_URL is `{SUPABASE_URL}/auth/v1/.well-known/jwks.json` —
+# e.g. http://127.0.0.1:54321/auth/v1/.well-known/jwks.json.
 
 SENTRY_DSN=
 SUPABASE_URL=

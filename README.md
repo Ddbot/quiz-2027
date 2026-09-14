@@ -96,9 +96,9 @@ Nothing secret is committed. `.env.example` / `.dev.vars.example` mirror this ta
 | `VITE_SUPABASE_ANON_KEY`    | Vercel project env; `apps/web/.env.local` locally     | browser (`apps/web`)     | anon key only — RLS enforced                                |
 | `VITE_SENTRY_DSN`           | Vercel project env; `apps/web/.env.local` locally     | browser (`apps/web`)     | optional; init no-ops when unset                            |
 | `VITE_PARTY_HOST`           | Vercel project env; `apps/web/.env.local` locally     | browser (`apps/web`)     | worker host, e.g. `quiz-2027-party.<subdomain>.workers.dev` |
-| `SUPABASE_URL`              | `wrangler secret put`; `apps/party/.dev.vars` locally | worker (`apps/party`)    | —                                                           |
-| `SUPABASE_SERVICE_ROLE_KEY` | `wrangler secret put`; `apps/party/.dev.vars` locally | worker (`apps/party`)    | **never** in any `apps/web` env or client bundle            |
-| `SUPABASE_JWKS_URL`         | `wrangler secret put`; `apps/party/.dev.vars` locally | worker (`apps/party`)    | verify user JWTs                                            |
+| `SUPABASE_URL`              | `wrangler secret put`; `apps/party/.dev.vars` locally | worker (`apps/party`)    | load-bearing since MILESTONE-05 (role resolution)            |
+| `SUPABASE_SERVICE_ROLE_KEY` | `wrangler secret put`; `apps/party/.dev.vars` locally | worker (`apps/party`)    | **never** in any `apps/web` env or client bundle; load-bearing since MILESTONE-05 |
+| `SUPABASE_JWKS_URL`         | `wrangler secret put`; `apps/party/.dev.vars` locally | worker (`apps/party`)    | verifies connecting JWTs (MILESTONE-05); locally: `{local SUPABASE_URL}/auth/v1/.well-known/jwks.json` |
 | `SENTRY_DSN`                | `wrangler secret put`; `apps/party/.dev.vars` locally | worker (`apps/party`)    | optional; `withSentry` no-ops when unset                    |
 | `CLOUDFLARE_API_TOKEN`      | GitHub Actions secret                                 | `deploy-worker.yml`      | scope: Workers Scripts:Edit                                 |
 | `CLOUDFLARE_ACCOUNT_ID`     | GitHub Actions secret                                 | `deploy-worker.yml`      | —                                                           |

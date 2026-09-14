@@ -142,6 +142,12 @@ importers:
       '@sentry/cloudflare':
         specifier: ^10.74.0
         version: 10.74.0(@cloudflare/workers-types@5.20260908.1)(wrangler@4.130.0(@cloudflare/workers-types@5.20260908.1))
+      '@supabase/supabase-js':
+        specifier: ^2.116.0
+        version: 2.116.0(@opentelemetry/api@1.9.1)
+      jose:
+        specifier: ^6.2.12
+        version: 6.2.12
       partyserver:
         specifier: ^0.5.10
         version: 0.5.10(@cloudflare/workers-types@5.20260908.1)
