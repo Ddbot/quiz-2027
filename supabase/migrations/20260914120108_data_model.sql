@@ -326,7 +326,7 @@ create policy team_admin_write_while_draft on public.team
 
 create policy game_mcq_select_admin_only on public.game_mcq
   for select
-  using (true); -- TEMP: verify CI catches this RLS regression (task 5.1), then revert
+  using (public.is_admin());
 
 create policy game_mcq_admin_write_while_draft on public.game_mcq
   for all
