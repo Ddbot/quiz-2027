@@ -30,11 +30,11 @@
 ## 5. CI and production rollout
 
 - [x] 5.1 Add a step (or job) to `.github/workflows/ci.yml` that runs `supabase start` then `pnpm --filter db test`, gated on paths touching `supabase/**` or `tools/db/**`, as part of the required `verify` check. Verify a PR shows it green, and that a deliberately broken RLS policy makes it fail. — implemented as unconditional steps in the `verify` job rather than path-gated (`tools/db` is now a permanent member of `pnpm test`'s workspace fan-out, so every CI run already needs Supabase up regardless of which paths changed — path-gating would just break the ungated case). PR #10 green (21/21 RLS assertions in real CI); a deliberately opened `game_mcq` policy (`f993e0f`'s predecessor) failed CI with the leaked `correct_option_id` shown in the assertion diff, then reverted.
-- [ ] 5.2 Run `supabase db push` to the linked production project. Verify the production migration history includes this migration.
-- [ ] 5.3 Owner runs `select app_promote_admin('<email>');` once per real admin account against production via the Supabase SQL Editor (not committed — design.md D4). Verify `profile.is_admin` is `true` for exactly those two accounts and no others.
+- [x] 5.2 Run `supabase db push` to the linked production project. Verify the production migration history includes this migration. — `supabase migration list` shows local `20260914120108` = remote `20260914120108`.
+- [x] 5.3 Owner runs `select app_promote_admin('<email>');` once per real admin account against production via the Supabase SQL Editor (not committed — design.md D4). Verify `profile.is_admin` is `true` for exactly those two accounts and no others. — owner-confirmed: exactly 2 rows.
 
 ## 6. Milestone acceptance verification
 
-- [ ] 6.1 Confirm migrations apply cleanly from empty via `supabase db push` — both a fresh local `db reset` and the production push in 5.2. (SPEC.md MILESTONE-02 AC1)
-- [ ] 6.2 Confirm the RLS test suite (4.1) passes locally and in CI (5.1): a player JWT cannot read another participant's row, cannot write content tables, cannot read admin data; an admin JWT can do all three. (AC2)
-- [ ] 6.3 Confirm the partial unique index rejects a second `live` event (1.2), exercised by the RLS/data-integrity suite. (AC3)
+- [x] 6.1 Confirm migrations apply cleanly from empty via `supabase db push` — both a fresh local `db reset` and the production push in 5.2. (SPEC.md MILESTONE-02 AC1) — both confirmed (1.1, 5.2).
+- [x] 6.2 Confirm the RLS test suite (4.1) passes locally and in CI (5.1): a player JWT cannot read another participant's row, cannot write content tables, cannot read admin data; an admin JWT can do all three. (AC2) — 21/21 locally and in CI (PR #10).
+- [x] 6.3 Confirm the partial unique index rejects a second `live` event (1.2), exercised by the RLS/data-integrity suite. (AC3) — confirmed directly (1.2) and by the RLS suite's "At most one event is live at a time" test.
