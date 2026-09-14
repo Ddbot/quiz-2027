@@ -35,7 +35,7 @@
 
 ## 7. CI and production rollout
 
-- [ ] 7.1 Confirm the existing Supabase-backed CI step (added in MILESTONE-02) picks up this migration and the new `tools/db` tests with no workflow changes needed. Verify a PR shows the required check green.
+- [x] 7.1 Confirm the existing Supabase-backed CI step (added in MILESTONE-02) picks up this migration and the new `tools/db` tests with no workflow changes needed. Verify a PR shows the required check green. — `.github/workflows/ci.yml` untouched by this whole change; PR #13's `verify` check green (34 db + 1 shared + 5 web + 2 party tests).
 - [ ] 7.2 Run `supabase db push` to the linked production project. Verify the production migration history includes this migration.
 - [ ] 7.3 Flip `enable_confirmations` on in the production Supabase dashboard. Verify the dashboard shows it enabled (real end-to-end email delivery is a manual/owner check, not part of this task's automated verification).
 
