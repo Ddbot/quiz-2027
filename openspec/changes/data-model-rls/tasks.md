@@ -1,0 +1,40 @@
+## 1. Schema migration
+
+- [x] 1.1 Create a new migration (`supabase migration new data_model`) with all tables and the `season_score` view from `SPEC.md` §7.3: `profile`, `event`, `step`, `game_mcq`, `team`, `participant`, `answer`, `step_result_participant`, `step_result_team`, `event_final_participant`, `event_final_team`, `season_score`. Verify `supabase db reset` applies it cleanly from empty. — `supabase db reset` applies cleanly; all 11 tables + `season_score` view confirmed present via `\dt`/`\dv`.
+- [x] 1.2 Add the partial unique index enforcing at most one `event` with `status = 'live'`. Verify: inserting a second `live` event via SQL raises a constraint violation while one is already `live`. — confirmed: first insert succeeds, second raises `duplicate key value violates unique constraint "event_one_live_idx"`.
+- [x] 1.3 Add a unique constraint on `answer (step_id, participant_id)`. Verify: inserting a second answer for the same step + participant raises a constraint violation. — confirmed: first insert succeeds, second raises `duplicate key value violates unique constraint "answer_step_id_participant_id_key"`.
+- [x] 1.4 Add the `AFTER INSERT ON auth.users` trigger + `SECURITY DEFINER` function that creates the matching `profile` row (`id`, `email`, `is_anonymous`, `is_admin` default `false`) — design.md D2. Verify: creating a user via the Supabase Admin API results in a matching `profile` row with `is_admin = false`. — confirmed via `/auth/v1/admin/users`: matching `profile` row created, `is_admin = f`.
+- [x] 1.5 Add `app_promote_admin(target_email text)` — `SECURITY DEFINER`, `REVOKE EXECUTE FROM PUBLIC`, `GRANT EXECUTE TO service_role` — design.md D4. Verify: calling it as the `anon` or `authenticated` role is rejected; calling it as `service_role` sets `is_admin = true` on the matching `profile` and errors for an unknown email. — found & fixed a real gap: Supabase's default privileges separately grant `anon`/`authenticated` EXECUTE on new functions, so `REVOKE ... FROM PUBLIC` alone didn't lock it down; added explicit `REVOKE ... FROM public, anon, authenticated`. Confirmed via `has_function_privilege`: anon/authenticated `f`, service_role `t`; confirmed the promote + unknown-email-error behavior via direct `SET ROLE service_role` calls.
+
+## 2. Row-level security
+
+- [x] 2.1 Enable RLS on every table in the migration. Verify: a request carrying no JWT is denied on every table. — verified by `tools/db/test/rls.test.ts` ("Unauthenticated requests are denied").
+- [x] 2.2 Add player policies: read own `profile` row; read own `participant` row. Verify with a player JWT. — verified by the RLS suite.
+- [x] 2.3 Add public-content read policies: event/step/team readable by any participant of that event. `game_mcq` is deliberately excluded (it carries `correct_option_id` — see design.md D8). Verify a player can read event/step/team content for their own event, not for an event they're not part of, and cannot read `game_mcq` at all. — verified by the RLS suite.
+- [x] 2.4 Add admin-only write policies on event/step/game_mcq/team, gated on `event.status = 'draft'`. Verify: admin write succeeds while `draft`, is rejected once `status <> 'draft'`, and a non-admin write is rejected regardless of status. — verified by the RLS suite ("Event content is admin-authored and locked once the event leaves draft").
+- [x] 2.5 Add admin-only read policies for administrative data: `game_mcq` (question + answer key, for every status, not just non-draft), other participants' `profile`/`participant` rows, `answer`, `step_result_participant`, `step_result_team`, `event_final_participant`, `event_final_team`. Verify a player cannot read another participant's data or any `game_mcq` row, and an admin can read all of it. — verified by the RLS suite.
+- [x] 2.6 Create `season_score` as `WITH (security_invoker = true)` over `event_final_participant`/`profile`, excluding anonymous and deleted profiles — design.md D5. Verify the view inherits `event_final_participant`'s RLS (player read denied, admin read succeeds) and totals sum correctly across two events for the same season. — verified by the RLS suite; needed enabling `enable_anonymous_sign_ins` in `supabase/config.toml` (was off) to mint a real anonymous test user for the exclusion scenario.
+
+## 3. `tools/db` package
+
+- [x] 3.1 Scaffold `tools/db` (package.json, tsconfig extending `tsconfig.base.json`, vitest.config.ts) so it's picked up by the existing `tools/*` workspace glob. Verify `pnpm install` and `pnpm --filter db typecheck` succeed. — both succeed cleanly.
+- [x] 3.2 Add `src/adminClient.ts`: a `supabase-js` client built from `SUPABASE_URL` + `SUPABASE_SERVICE_ROLE_KEY` env vars (local `.env`, not committed). Verify it connects against a locally running `supabase start` stack. — also added `createUserClient()` (needed by the RLS suite); confirmed connecting via the `testUsers.ts` smoke check below.
+- [x] 3.3 Add `src/testUsers.ts`: `createPlayer()` and `createAdmin()` — create an `auth.users` row via the Admin API, sign in, and for `createAdmin()` also call `app_promote_admin`; both return `{ profileId, accessToken }`. Verify a smoke test creates one of each and both access tokens decode to valid, distinct users. — confirmed: distinct profile ids, valid access tokens, `profile.is_admin` true only for the admin.
+- [x] 3.4 Add `scripts/seed.ts`: creates a draft event with a couple of participants for local dev, reusing `testUsers.ts`. Verify `supabase db reset && pnpm --filter db seed` leaves a queryable draft event with participants. — confirmed: `DEMO01`, `draft`, 2 participants queryable after reset + seed.
+- [x] 3.5 Update `supabase/seed.sql` to a comment-only placeholder pointing at `pnpm --filter db seed`, and update `README.md`'s local-setup steps to include the new seed command. — done; also added `tools/db/.env.example` to the local-setup table and `pnpm --filter db seed`/`test` to Common commands.
+
+## 4. RLS test suite
+
+- [x] 4.1 Write `test/rls.test.ts` (Vitest) covering every scenario in `openspec/changes/data-model-rls/specs/data-model/spec.md`: unauthenticated denial, player reads own participant/profile, player cannot read another participant's row, player reads own-event public content, player cannot read another event's data, non-admin content write always rejected, admin content write allowed only while draft, admin data readable only by admin, signup never grants admin, designated admins have admin status after promotion, duplicate answer rejected, second live event rejected, `season_score` totals and access. Verify `pnpm --filter db test` passes against a freshly reset local stack. — 21/21 assertions pass (`pnpm --filter db test`).
+
+## 5. CI and production rollout
+
+- [ ] 5.1 Add a step (or job) to `.github/workflows/ci.yml` that runs `supabase start` then `pnpm --filter db test`, gated on paths touching `supabase/**` or `tools/db/**`, as part of the required `verify` check. Verify a PR shows it green, and that a deliberately broken RLS policy makes it fail.
+- [ ] 5.2 Run `supabase db push` to the linked production project. Verify the production migration history includes this migration.
+- [ ] 5.3 Owner runs `select app_promote_admin('<email>');` once per real admin account against production via the Supabase SQL Editor (not committed — design.md D4). Verify `profile.is_admin` is `true` for exactly those two accounts and no others.
+
+## 6. Milestone acceptance verification
+
+- [ ] 6.1 Confirm migrations apply cleanly from empty via `supabase db push` — both a fresh local `db reset` and the production push in 5.2. (SPEC.md MILESTONE-02 AC1)
+- [ ] 6.2 Confirm the RLS test suite (4.1) passes locally and in CI (5.1): a player JWT cannot read another participant's row, cannot write content tables, cannot read admin data; an admin JWT can do all three. (AC2)
+- [ ] 6.3 Confirm the partial unique index rejects a second `live` event (1.2), exercised by the RLS/data-integrity suite. (AC3)

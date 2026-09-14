@@ -37,16 +37,18 @@ pnpm install
 # local Supabase (Postgres, Auth, Storage) — needs Docker running
 pnpm exec supabase start
 pnpm exec supabase status     # all services should be healthy
+pnpm --filter db seed         # fixtures: a draft event with participants
 
 pnpm dev                # runs apps/web (Vite) and apps/party (wrangler dev) in parallel
 ```
 
 Copy each `.env.example` / `.dev.vars.example` next to it and fill in real values:
 
-| File                                         | Used by         |
-| -------------------------------------------- | --------------- |
-| `apps/web/.env.example` → `.env.local`       | Vite dev server |
-| `apps/party/.dev.vars.example` → `.dev.vars` | `wrangler dev`  |
+| File                                         | Used by                          |
+| --------------------------------------------- | --------------------------------- |
+| `apps/web/.env.example` → `.env.local`       | Vite dev server                  |
+| `apps/party/.dev.vars.example` → `.dev.vars` | `wrangler dev`                   |
+| `tools/db/.env.example` → `.env`             | seed script, RLS test suite (local only — never production) |
 
 ### Common commands
 
@@ -60,6 +62,8 @@ Copy each `.env.example` / `.dev.vars.example` next to it and fill in real value
 | `pnpm check:shared-isolation`              | assert `@quiz/shared` has zero runtime deps       |
 | `pnpm --filter party exec wrangler deploy` | manual worker deploy                              |
 | `pnpm exec supabase db push`               | apply migrations to the linked production project |
+| `pnpm --filter db seed`                    | (re)seed local fixtures after a `db reset`        |
+| `pnpm --filter db test`                    | run the RLS test suite against the local stack    |
 
 ## Environments
 

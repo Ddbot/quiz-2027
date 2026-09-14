@@ -33,6 +33,24 @@ jobs:
       - name: Build
         run: pnpm build
 
+      # tools/db's RLS suite is part of `pnpm test`'s workspace fan-out, so
+      # the local Supabase stack (Docker, pre-installed on this runner) has
+      # to be up before that step runs.
+      - name: Start local Supabase
+        run: pnpm exec supabase start
+
+      - name: Configure tools/db env
+        run: |
+          # `supabase status -o env` mixes diagnostic lines (e.g. "Stopped
+          # services: [...]") in with the KEY="value" ones — filter to the
+          # well-formed assignments only before eval'ing them.
+          eval "$(pnpm exec supabase status -o env 2>&1 | grep -E '^[A-Za-z_][A-Za-z0-9_]*="')"
+          {
+            echo "SUPABASE_URL=$API_URL"
+            echo "SUPABASE_ANON_KEY=$PUBLISHABLE_KEY"
+            echo "SUPABASE_SERVICE_ROLE_KEY=$SECRET_KEY"
+          } >> "$GITHUB_ENV"
+
       - name: Test
         run: pnpm test
 

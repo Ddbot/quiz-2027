@@ -1,2 +1,5 @@
 -- Local-only seed data, applied by `supabase db reset`.
--- Empty for MILESTONE-01 (no data model yet). Later milestones add fixtures here.
+-- Deliberately empty: identity-bearing fixtures (a draft event with
+-- participants) need `auth.users` rows, which requires the Supabase Admin
+-- API, not plain SQL. Run `pnpm --filter db seed` after resetting instead
+-- (see openspec/changes/data-model-rls/design.md D7).
