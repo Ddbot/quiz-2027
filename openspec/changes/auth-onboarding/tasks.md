@@ -1,0 +1,47 @@
+## 1. Schema: `join_event` and profanity check
+
+- [x] 1.1 Add a migration with `profanity_word (word text, language text)`, a starter FR+EN seed list, and `is_profane(text) returns boolean` (design D2). Verify `select is_profane('<seeded word>')` returns `true` and `select is_profane('hello')` returns `false`. — confirmed FR+EN, `is_profane` uses substring (not whole-word) match so inflected forms are caught; fixed a default-privileges gap (same class as MILESTONE-02's `app_promote_admin`) so `anon` cannot call it.
+- [x] 1.2 Add `join_event(p_join_code text, p_display_name text)` — `SECURITY DEFINER`, validates the code and event status, checks profanity, creates or idempotently returns the caller's `participant` (design D1). Verify by direct RPC call: valid join creates a participant; a repeat call for the same identity+event returns the same participant id and does not insert a second row; an unknown code raises `invalid_code`; a call against an `ended` event raises `event_not_joinable`; a profane display name raises `profanity`. — verified by `tools/db/test/joinEvent.test.ts` (7/7); also confirmed joining a `live` event (late joiner) succeeds, per design D1.
+- [x] 1.3 Re-assert (regression, MILESTONE-02) that no non-admin role can `insert` into `participant` directly. Verify: a direct insert attempt via a player JWT is denied. — confirmed by the "denies a direct insert into participant" test.
+- [x] 1.4 Add `event_public_summary` — a plain view (no `security_invoker`) exposing `id, join_code, title, language, status, venue_label`, `SELECT` granted to `anon` and `authenticated` (design D6; gap found implementing 4.1 — SPEC.md §7.4.1's `GET /rest/v1/event?join_code=eq.{code}` needs to work before any session exists, which MILESTONE-02's RLS on `event` never allowed for). Verify: an unauthenticated request can read a known join code's summary; the same request against an unknown code returns no rows; the view never exposes `created_by`, `waiting_media_path`, `waiting_countdown_target`, or `current_step_id`. — confirmed via unauthenticated `curl` and now `tools/db/test/joinEvent.test.ts`'s `event_public_summary` block (3 tests); querying `created_by` through the view is rejected; the base `event` table stays blocked unauthenticated. (One-off local hiccup: PostgREST's schema cache needed a manual container restart once after a `db reset` on an already-running stack; a normal `db reset` restarts it automatically per its own output, and the automated suite has passed cleanly since — not expected to affect CI, which always boots fresh.)
+
+## 2. Email confirmation
+
+- [x] 2.1 Set `enable_confirmations = true` in `supabase/config.toml`; restart the local stack (`supabase stop && supabase start`) so GoTrue picks it up. Verify: signing up a fresh account returns no session until the email is confirmed. — confirmed via `/auth/v1/signup`: no `session`/`access_token` in the response, `email_confirmed_at: null`. Existing `tools/db` suite (which force-confirms via the Admin API) unaffected — still 28/28.
+- [x] 2.2 Document in `README.md` that production requires the same toggle in the Supabase dashboard (Authentication → Providers → Email) since `config.toml` only governs the local stack. — also documented the MILESTONE-02 `enable_anonymous_sign_ins` production toggle, which was never written down.
+
+## 3. `apps/web`: Supabase client and auth plumbing
+
+- [x] 3.1 Add `@supabase/supabase-js` to `apps/web`; add `src/lib/supabase.ts` — a singleton browser client from `VITE_SUPABASE_URL`/`VITE_SUPABASE_ANON_KEY`. Verify `pnpm --filter web typecheck` and `build` succeed. — hit and fixed a stale-lockfile symlink (pnpm resolved apps/web to a non-materialized unqualified `@supabase/supabase-js` build instead of the actual `@opentelemetry/api`-peer-qualified one); `pnpm dedupe` corrected it. Both typecheck and build green; full workspace `pnpm test` re-confirmed unaffected (28 db + 1 shared + 3 web + 2 party).
+- [x] 3.2 Add an auth context/hook exposing the current session and sign-in helpers (anonymous, sign up, sign in, sign out), backed by `supabase.auth.onAuthStateChange`. Verify a unit test renders a consumer and reflects a session-state change. — `AuthProvider`/`useAuth`; test covers loading → signed-out → signed-in via a mocked `onAuthStateChange` callback.
+
+## 4. `apps/web`: onboarding flow
+
+- [x] 4.1 Replace `/e/:joinCode`'s placeholder: resolve the join code via `GET /rest/v1/event?join_code=eq.{code}`, showing the event summary or a clear invalid-code error. Verify a Testing Library test for both the valid and invalid cases. — resolves against `event_public_summary` (task 1.4) instead of `event` directly, since the base table isn't publicly readable. 2 dedicated tests pass. Found and fixed a real bug in my *test* setup along the way: rendering `<PlayerRoute/>` without a matching `<Routes><Route path="/e/:joinCode">` meant `useParams()` never resolved — not a bug in the component.
+- [ ] 4.2 Identity-choice screen: anonymous (display name only) vs. account (email + password + display name), plus sign-in for a returning account holder. Verify tests covering rendering and submission wiring for all three paths (mocked `supabase-js`).
+- [ ] 4.3 Age + Terms/Privacy + marketing-consent gate: blocks progress until the 16+ and Terms/Privacy checkboxes are both checked; marketing consent is a separate, unticked, optional checkbox. Verify a test that submission is blocked without the two required boxes and succeeds with marketing consent left unchecked.
+- [ ] 4.4 Permanent-name warning screen requiring explicit confirmation before the name is used to join. Verify a test that `join_event` is not called before confirmation and is called after.
+- [ ] 4.5 Wire confirmed identity + consent + name into a `join_event` call; handle its responses (success, `profanity` retry, `invalid_code`, `event_not_joinable`) in the UI. Verify tests for the profanity-retry path and the success path.
+- [ ] 4.6 Add a small FR/EN copy dictionary for the onboarding flow's own text, selected by `event.language` (design D5). Verify a test that the same screen renders French copy for a `fr` event and English copy for an `en` event.
+
+## 5. Placeholder legal pages
+
+- [ ] 5.1 Add placeholder Terms of Service and Privacy Policy pages/routes, linked from the consent screen's checkboxes. Verify the pages render and the consent screen's links navigate to them.
+
+## 6. `tools/db`: RPC and confirmation-flow tests
+
+- [x] 6.1 Vitest suite for `join_event` covering every scenario in `specs/data-model/spec.md`'s new requirement: valid join, idempotent re-join, invalid code, `ended`-event rejection, profanity rejection, and the direct-insert-denied regression. Verify `pnpm --filter db test` passes. — 28/28 (7 new + 21 existing). Found and fixed a real cross-file fixture collision: the "at most one live event" constraint is a genuinely global resource, so both `rls.test.ts` and this suite now release their `live` event fixture in `afterAll`.
+- [ ] 6.2 Add a Mailpit-based helper (fetches a test account's confirmation email via `MAILPIT_URL`'s HTTP API, extracts and follows the verification link) and a test proving a signed-up account has no session until confirmed, and a usable session after (design D4). Verify `pnpm --filter db test` passes including this case.
+
+## 7. CI and production rollout
+
+- [ ] 7.1 Confirm the existing Supabase-backed CI step (added in MILESTONE-02) picks up this migration and the new `tools/db` tests with no workflow changes needed. Verify a PR shows the required check green.
+- [ ] 7.2 Run `supabase db push` to the linked production project. Verify the production migration history includes this migration.
+- [ ] 7.3 Flip `enable_confirmations` on in the production Supabase dashboard. Verify the dashboard shows it enabled (real end-to-end email delivery is a manual/owner check, not part of this task's automated verification).
+
+## 8. Milestone acceptance verification
+
+- [ ] 8.1 Confirm FR-001 through FR-009 and FR-011 each demonstrably pass, recording where each is verified (tasks above / `tools/db` suite / component tests). (SPEC.md MILESTONE-03 AC1)
+- [ ] 8.2 Confirm re-joining the same event with the same identity returns the same participant. (AC2 — verified by 1.2/6.1)
+- [ ] 8.3 Confirm a profane display name is rejected with a retry, end to end through the UI. (AC3 — verified by 4.5/6.1)
+- [ ] 8.4 Confirm account creation succeeds with marketing consent left unchecked. (AC4 — verified by 4.3)

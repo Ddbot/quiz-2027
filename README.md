@@ -74,6 +74,15 @@ per-PR previews (if enabled) point at the production backend services.
 - **party** → `.github/workflows/deploy-worker.yml` runs `wrangler deploy` on merge to `main` touching `apps/party` or `packages/shared`.
 - **schema** → `supabase db push`, run manually for now.
 
+### Production-only dashboard settings
+
+`supabase/config.toml` only governs the **local** stack (`supabase start`) — these Auth toggles must be set manually in the production project's dashboard (**Authentication → Providers → Email**, and the **Anonymous sign-ins** toggle on the same page) before the equivalent local-tested flows work in production:
+
+| Setting | Local (`config.toml`) | Production |
+| --- | --- | --- |
+| Anonymous sign-ins | `enable_anonymous_sign_ins = true` | must be enabled in the dashboard |
+| Email confirmations | `enable_confirmations = true` | must be enabled in the dashboard |
+
 ## Secrets matrix
 
 Nothing secret is committed. `.env.example` / `.dev.vars.example` mirror this table.

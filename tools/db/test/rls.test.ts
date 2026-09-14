@@ -2,7 +2,7 @@
 // Needs a fresh `supabase db reset` first — every insert below assumes an
 // empty schema (unique join_codes etc.). See openspec/changes/data-model-rls/
 // specs/data-model/spec.md for the requirements each block proves.
-import { beforeAll, describe, expect, it } from "vitest";
+import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { createAdminClient, createAnonClient, createUserClient } from "../src/adminClient.js";
 import { createAdmin, createAnonymousPlayer, createPlayer, type TestUser } from "../src/testUsers.js";
@@ -83,6 +83,13 @@ beforeAll(async () => {
   teamA = (
     await admin.from("team").insert({ event_id: eventA.id, name: "Team Alpha" }).select().single()
   ).data as Row;
+});
+
+afterAll(async () => {
+  // Only one `live` event may exist at a time (the partial unique index this
+  // suite itself tests) — it's a genuinely global resource, so release it for
+  // other test files/runs rather than leaving it live indefinitely.
+  await admin.from("event").delete().eq("id", eventLive.id);
 });
 
 describe("Unauthenticated requests are denied", () => {
