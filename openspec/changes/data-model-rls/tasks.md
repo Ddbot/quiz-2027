@@ -29,7 +29,7 @@
 
 ## 5. CI and production rollout
 
-- [ ] 5.1 Add a step (or job) to `.github/workflows/ci.yml` that runs `supabase start` then `pnpm --filter db test`, gated on paths touching `supabase/**` or `tools/db/**`, as part of the required `verify` check. Verify a PR shows it green, and that a deliberately broken RLS policy makes it fail.
+- [x] 5.1 Add a step (or job) to `.github/workflows/ci.yml` that runs `supabase start` then `pnpm --filter db test`, gated on paths touching `supabase/**` or `tools/db/**`, as part of the required `verify` check. Verify a PR shows it green, and that a deliberately broken RLS policy makes it fail. — implemented as unconditional steps in the `verify` job rather than path-gated (`tools/db` is now a permanent member of `pnpm test`'s workspace fan-out, so every CI run already needs Supabase up regardless of which paths changed — path-gating would just break the ungated case). PR #10 green (21/21 RLS assertions in real CI); a deliberately opened `game_mcq` policy (`f993e0f`'s predecessor) failed CI with the leaked `correct_option_id` shown in the assertion diff, then reverted.
 - [ ] 5.2 Run `supabase db push` to the linked production project. Verify the production migration history includes this migration.
 - [ ] 5.3 Owner runs `select app_promote_admin('<email>');` once per real admin account against production via the Supabase SQL Editor (not committed — design.md D4). Verify `profile.is_admin` is `true` for exactly those two accounts and no others.
 
