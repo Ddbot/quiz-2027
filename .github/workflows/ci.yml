@@ -24,6 +24,14 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # @quiz/shared's dist/ is gitignored and untracked (built output), so a
+      # fresh checkout has none — typecheck of any consuming package (e.g.
+      # apps/party, since MILESTONE-05) needs it to exist first. `pnpm build`
+      # alone respects workspace topological order and would build it before
+      # any dependent, but Typecheck runs before the full Build step below.
+      - name: Build shared package
+        run: pnpm --filter @quiz/shared build
+
       - name: Typecheck
         run: pnpm typecheck
 
