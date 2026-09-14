@@ -36,12 +36,22 @@
 ## 7. CI and production rollout
 
 - [x] 7.1 Confirm the existing Supabase-backed CI step (added in MILESTONE-02) picks up this migration and the new `tools/db` tests with no workflow changes needed. Verify a PR shows the required check green. — `.github/workflows/ci.yml` untouched by this whole change; PR #13's `verify` check green (34 db + 1 shared + 5 web + 2 party tests).
-- [ ] 7.2 Run `supabase db push` to the linked production project. Verify the production migration history includes this migration.
-- [ ] 7.3 Flip `enable_confirmations` on in the production Supabase dashboard. Verify the dashboard shows it enabled (real end-to-end email delivery is a manual/owner check, not part of this task's automated verification).
+- [x] 7.2 Run `supabase db push` to the linked production project. Verify the production migration history includes this migration. — `supabase migration list` shows local `20260914140924` = remote `20260914140924`.
+- [x] 7.3 Flip `enable_confirmations` on in the production Supabase dashboard. Verify the dashboard shows it enabled (real end-to-end email delivery is a manual/owner check, not part of this task's automated verification). — owner-confirmed enabled (Authentication → Providers → Email → Confirm email).
 
 ## 8. Milestone acceptance verification
 
-- [ ] 8.1 Confirm FR-001 through FR-009 and FR-011 each demonstrably pass, recording where each is verified (tasks above / `tools/db` suite / component tests). (SPEC.md MILESTONE-03 AC1)
-- [ ] 8.2 Confirm re-joining the same event with the same identity returns the same participant. (AC2 — verified by 1.2/6.1)
-- [ ] 8.3 Confirm a profane display name is rejected with a retry, end to end through the UI. (AC3 — verified by 4.5/6.1)
-- [ ] 8.4 Confirm account creation succeeds with marketing consent left unchecked. (AC4 — verified by 4.3)
+- [x] 8.1 Confirm FR-001 through FR-009 and FR-011 each demonstrably pass, recording where each is verified (tasks above / `tools/db` suite / component tests). (SPEC.md MILESTONE-03 AC1)
+  - FR-001 (`/e/:joinCode`, manual entry): `PlayerRoute.test.tsx` — resolves a real code, shows a clear error for an invalid one (4.1). QR generation itself is an admin/MILESTONE-04 concern; the URL pattern the QR would encode already works.
+  - FR-002 (anonymous, display name only): `OnboardingFlow.test.tsx` "joins anonymously..." (4.2).
+  - FR-003 (account + email verification required): `IdentityStep` create-account mode (4.2) + `emailConfirmation.test.ts` proving no session until confirmed (6.2).
+  - FR-004 (permanent-name warning, explicit confirm): `NameConfirmStep`; confirmed `join_event` never fires before the confirm click (4.4).
+  - FR-005 (16+ checkbox, no DOB stored): `IdentityStep`'s required checkbox (4.3); `profile` has no date-of-birth column at all (data-model-rls, MILESTONE-02) — structurally impossible to store one.
+  - FR-006 (ToS/Privacy acceptance recorded on profile): consent checkboxes (4.3) + `join_event`'s `over16_ack`/`tos_accepted_at` recording (1.2 follow-up, tested) + placeholder legal pages linked from the checkbox (5.1).
+  - FR-007 (marketing consent optional, unticked): `OnboardingFlow.test.tsx` "marketing consent left unchecked" (4.3, = AC4/8.4).
+  - FR-008 (idempotent join): `joinEvent.test.ts` "is idempotent" (1.2, = AC2/8.2).
+  - FR-009 (name immutable once confirmed): no UI or RPC in this milestone exposes any way to edit an existing `participant.display_name` — immutability holds because nothing implements editing, not just by convention.
+  - FR-011 (admin status out-of-band): established in MILESTONE-02 (`app_promote_admin`, `data-model` RLS); reconfirmed here — nothing in the signup/join_event path touches `is_admin`.
+- [x] 8.2 Confirm re-joining the same event with the same identity returns the same participant. (AC2 — verified by 1.2/6.1) — `joinEvent.test.ts` "is idempotent — repeat join returns the same participant."
+- [x] 8.3 Confirm a profane display name is rejected with a retry, end to end through the UI. (AC3 — verified by 4.5/6.1) — `OnboardingFlow.test.tsx` "lets the player retry with a new name after a profanity rejection" (UI, end to end) + `joinEvent.test.ts` "rejects a profane display name" (RPC contract).
+- [x] 8.4 Confirm account creation succeeds with marketing consent left unchecked. (AC4 — verified by 4.3) — `OnboardingFlow.test.tsx` "account creation succeeds with marketing consent left unchecked."
