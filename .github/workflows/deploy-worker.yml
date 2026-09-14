@@ -28,6 +28,12 @@ jobs:
 
       - run: pnpm install --frozen-lockfile
 
+      # @quiz/shared's dist/ is gitignored and untracked (built output) — a
+      # fresh checkout has none, and apps/party imports it at bundle time
+      # (since MILESTONE-05). See the matching fix in ci.yml.
+      - name: Build shared package
+        run: pnpm --filter @quiz/shared build
+
       - name: Deploy to Cloudflare
         run: pnpm --filter party exec wrangler deploy
         env:
