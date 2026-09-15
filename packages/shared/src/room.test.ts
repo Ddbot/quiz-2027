@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { applyMutation, defaultRoomState, requireFlowController } from "./room.js";
+import { toStateMessage } from "./protocol.js";
 
 describe("applyMutation", () => {
   it("reports unchanged when mutate returns the same reference", () => {
@@ -33,5 +34,24 @@ describe("requireFlowController", () => {
   it("is false for a different identity", () => {
     const state = { ...defaultRoomState(), controllerId: "admin-1" };
     expect(requireFlowController(state, "admin-2")).toBe(false);
+  });
+});
+
+describe("toStateMessage", () => {
+  it("includes question as null when no step is active", () => {
+    const message = toStateMessage(defaultRoomState(), "2026-09-15T00:00:00.000Z");
+    expect(message.question).toBeNull();
+  });
+
+  it("includes the active step's question when present", () => {
+    const state = {
+      ...defaultRoomState(),
+      question: { text: "2 + 2 = ?", options: [{ id: "a", label: "3" }, { id: "b", label: "4" }] },
+    };
+    const message = toStateMessage(state, "2026-09-15T00:00:00.000Z");
+    expect(message.question).toEqual({
+      text: "2 + 2 = ?",
+      options: [{ id: "a", label: "3" }, { id: "b", label: "4" }],
+    });
   });
 });

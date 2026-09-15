@@ -37,6 +37,34 @@ function pendingQuery(): PromiseLike<never> & Record<string, () => unknown> {
 }
 from.mockImplementation(() => pendingQuery());
 
+// A minimal fake PartySocket (mirrors useEventRoom.test.ts's convention) so
+// the live-game branch (task 9.1) can be driven by dispatching a `state`
+// message directly, without a real WebSocket connection.
+const { FakePartySocket, socketInstances } = vi.hoisted(() => {
+  class FakePartySocket extends EventTarget {
+    sent: string[] = [];
+    constructor(public opts: { host: string; party: string; room: string; query?: Record<string, string> }) {
+      super();
+    }
+    send(data: string) {
+      this.sent.push(data);
+    }
+    close() {}
+  }
+  return { FakePartySocket, socketInstances: [] as InstanceType<typeof FakePartySocket>[] };
+});
+
+vi.mock("partysocket", () => ({
+  PartySocket: vi.fn().mockImplementation(function (
+    this: unknown,
+    opts: { host: string; party: string; room: string; query?: Record<string, string> },
+  ) {
+    const socket = new FakePartySocket(opts);
+    socketInstances.push(socket);
+    return socket;
+  }),
+}));
+
 vi.mock("@/lib/supabase", () => ({
   supabase: {
     auth: { getSession, onAuthStateChange, signInAnonymously, signUp, signInWithPassword },
@@ -82,6 +110,7 @@ describe("OnboardingFlow", () => {
     getSession.mockResolvedValue({ data: { session: null } });
     onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } });
     from.mockImplementation(() => pendingQuery());
+    socketInstances.length = 0;
   });
 
   it("links the consent checkbox to the Terms and Privacy pages", () => {
@@ -171,9 +200,12 @@ describe("OnboardingFlow", () => {
     expect(await screen.findByRole("heading", { name: /équipe/i })).toBeInTheDocument();
   });
 
-  it("does not show the team-lobby step once joined, for a live event", async () => {
+  it("does not show the team-lobby step once joined, for a live event, and shows the live-game view once the room broadcasts eventStatus live", async () => {
     const liveEventFr = { ...draftEventFr, status: "live" as const };
     const user = userEvent.setup();
+    getSession.mockResolvedValue({
+      data: { session: { access_token: "test-token", user: { id: "u-1" } } },
+    });
     signInAnonymously.mockResolvedValue({ error: null });
     rpc.mockResolvedValue({
       data: { participant: { id: "p-1", display_name: "Alice" }, event: { id: liveEventFr.id } },
@@ -190,6 +222,27 @@ describe("OnboardingFlow", () => {
 
     await waitFor(() => expect(screen.getByTestId("joined-display-name")).toHaveTextContent("Alice"));
     expect(screen.queryByRole("heading", { name: /équipe/i })).not.toBeInTheDocument();
+
+    // The team-lobby-still-showing branch is covered by the draft-event test
+    // above; this is the live-game-showing branch (task 9.1) — driven by a
+    // `state` broadcast from the (faked) EventRoom connection.
+    await waitFor(() => expect(socketInstances).toHaveLength(1));
+    const socket = socketInstances[0]!;
+    socket.dispatchEvent(
+      new MessageEvent("message", {
+        data: JSON.stringify({
+          type: "state",
+          eventStatus: "live",
+          step: null,
+          question: null,
+          display: "waiting",
+          controllerId: "admin-1",
+          serverNow: new Date().toISOString(),
+        }),
+      }),
+    );
+
+    expect(await screen.findByTestId("live-waiting-view")).toBeInTheDocument();
   });
 
   it("account creation succeeds with marketing consent left unchecked", async () => {
