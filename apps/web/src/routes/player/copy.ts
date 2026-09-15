@@ -67,6 +67,11 @@ export const playerCopy = {
     liveAnsweredBody: "En attente du résultat…",
     liveLockedTitle: "Temps écoulé",
     liveLockedBody: "Vous n'avez pas répondu à temps. En attente du résultat…",
+
+    landingIntro: "Entrez le code de la soirée pour rejoindre.",
+    joinCodeInputLabel: "Code de participation",
+    landingJoinButton: "Rejoindre",
+    landingAdminLink: "Vous êtes organisateur ou organisatrice ? Se connecter",
   },
   en: {
     heading: "Quiz 2027",
@@ -130,6 +135,11 @@ export const playerCopy = {
     liveAnsweredBody: "Waiting for the result…",
     liveLockedTitle: "Time's up",
     liveLockedBody: "You didn't answer in time. Waiting for the result…",
+
+    landingIntro: "Enter tonight's code to join.",
+    joinCodeInputLabel: "Join code",
+    landingJoinButton: "Join",
+    landingAdminLink: "Are you the organizer? Sign in",
   },
 } as const;
 

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { MemoryRouter } from "react-router-dom";
 import { describe, expect, it, vi } from "vitest";
 
@@ -34,6 +35,27 @@ function renderAt(path: string) {
 }
 
 describe("route shells", () => {
+  it("the root path is a join-code landing page, not an admin redirect", () => {
+    renderAt("/");
+    expect(screen.getByLabelText(/code de participation/i)).toBeInTheDocument();
+    expect(screen.queryByRole("heading", { name: /administration/i })).not.toBeInTheDocument();
+  });
+
+  it("submitting a join code on the landing page navigates to /e/:code", async () => {
+    const user = userEvent.setup();
+    renderAt("/");
+
+    await user.type(screen.getByLabelText(/code de participation/i), "abcd12");
+    await user.click(screen.getByRole("button", { name: /rejoindre/i }));
+
+    expect(screen.getByTestId("join-code")).toHaveTextContent("ABCD12");
+  });
+
+  it("the landing page links to admin sign-in", () => {
+    renderAt("/");
+    expect(screen.getByRole("link", { name: /organisateur/i })).toHaveAttribute("href", "/admin");
+  });
+
   it("player route reads the join code from the URL", () => {
     renderAt("/e/ABCD12");
     expect(screen.getByTestId("join-code")).toHaveTextContent("ABCD12");
