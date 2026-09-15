@@ -5,6 +5,15 @@
 /** A connection's role, resolved server-side at connect time (event-room capability). */
 export type RoomRole = "player" | "admin";
 
+/**
+ * Fixed latency grace added to a timed step's countdown before it hard-locks
+ * (live-mcq-round design.md D3) — SPEC.md specifies "a small fixed latency
+ * grace" without pinning a value. Shared by the server's authoritative check
+ * and the client's own expiry computation (design.md D4/D8) so they never
+ * drift apart.
+ */
+export const GRACE_MS = 2000;
+
 /** Summary of the event's current step, as held by the EventRoom (SPEC.md §7.4.2 `state`). */
 export interface RoomStep {
   id: string;
@@ -25,6 +34,18 @@ export type RoomDisplay =
   | "podium"
   | "blank";
 
+/** One answer option, as broadcast to clients (never the correct one — see design.md D6). */
+export interface RoomQuestionOption {
+  id: string;
+  label: string;
+}
+
+/** The active step's question content, minus the answer key (live-mcq-round: "never the answer key"). */
+export interface RoomQuestion {
+  text: string;
+  options: RoomQuestionOption[];
+}
+
 /**
  * The EventRoom's authoritative state (FR-030). Matches the `state` message
  * shape in SPEC.md §7.4.2's Server→Client table, minus `serverNow` (computed
@@ -33,6 +54,8 @@ export type RoomDisplay =
 export interface RoomState {
   eventStatus: "draft" | "live" | "ended";
   step: RoomStep | null;
+  /** The active step's question/options (live-mcq-round design.md D6), or `null` when no step is active. */
+  question: RoomQuestion | null;
   display: RoomDisplay;
   /** `profile_id` of the identity currently holding the flow-control lock, or none yet. */
   controllerId: string | null;
@@ -40,7 +63,7 @@ export interface RoomState {
 
 /** The state a freshly constructed EventRoom starts with (no prior persisted state). */
 export function defaultRoomState(): RoomState {
-  return { eventStatus: "draft", step: null, display: "waiting", controllerId: null };
+  return { eventStatus: "draft", step: null, question: null, display: "waiting", controllerId: null };
 }
 
 /**

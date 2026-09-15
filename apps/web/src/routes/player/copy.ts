@@ -59,6 +59,14 @@ export const playerCopy = {
     noTeamsAvailable: "Aucune équipe pour le moment. Soyez la première à en créer une !",
     teamErrorNameTaken: "Ce nom d'équipe est déjà pris. Merci d'en choisir un autre.",
     teamErrorNotCaptain: "Seul le ou la capitaine peut renommer l'équipe.",
+
+    liveWaitingTitle: "En attente du prochain round",
+    liveWaitingBody: "Restez sur cette page, la partie va bientôt commencer.",
+    liveQuestionConfirmButton: "Valider ma réponse",
+    liveAnsweredTitle: "Réponse envoyée",
+    liveAnsweredBody: "En attente du résultat…",
+    liveLockedTitle: "Temps écoulé",
+    liveLockedBody: "Vous n'avez pas répondu à temps. En attente du résultat…",
   },
   en: {
     heading: "Quiz 2027",
@@ -114,6 +122,14 @@ export const playerCopy = {
     noTeamsAvailable: "No teams yet. Be the first to create one!",
     teamErrorNameTaken: "That team name is already taken. Please choose another one.",
     teamErrorNotCaptain: "Only the captain can rename the team.",
+
+    liveWaitingTitle: "Waiting for the next round",
+    liveWaitingBody: "Stay on this page — the round will start shortly.",
+    liveQuestionConfirmButton: "Submit my answer",
+    liveAnsweredTitle: "Answer submitted",
+    liveAnsweredBody: "Waiting for the result…",
+    liveLockedTitle: "Time's up",
+    liveLockedBody: "You didn't answer in time. Waiting for the result…",
   },
 } as const;
 
