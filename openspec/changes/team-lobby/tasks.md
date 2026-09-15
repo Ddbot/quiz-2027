@@ -60,4 +60,4 @@
 
 ## 8. Close-out
 
-- [ ] 8.1 Push the migration to production (`supabase db push`) after explicit owner confirmation — verify the new functions and trigger exist in the production project before merging.
+- [x] 8.1 Push the migration to production (`supabase db push`) after explicit owner confirmation — verify the new functions and trigger exist in the production project before merging. Owner confirmed via AskUserQuestion ("Yes, push to production"); `supabase db push` applied `20260915085750_team_lobby.sql` successfully; verified with `supabase migration list --linked`, showing the migration's `local` and `remote` timestamps matching.
