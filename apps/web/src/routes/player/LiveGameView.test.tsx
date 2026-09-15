@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from "vitest";
 
 import { getPlayerCopy } from "@/routes/player/copy";
 import { LiveGameView } from "@/routes/player/LiveGameView";
-import type { RoomQuestion, RoomStep } from "@quiz/shared";
+import type { OwnResultMessage, RoomQuestion, RoomStep } from "@quiz/shared";
 
 const copy = getPlayerCopy("fr");
 
@@ -32,6 +32,7 @@ describe("LiveGameView", () => {
         step={null}
         question={null}
         answerAck={null}
+        ownResult={null}
         isExpired={() => false}
         sendCommand={vi.fn()}
       />,
@@ -46,6 +47,7 @@ describe("LiveGameView", () => {
         step={{ ...activeStep, status: "pending" }}
         question={null}
         answerAck={null}
+        ownResult={null}
         isExpired={() => false}
         sendCommand={vi.fn()}
       />,
@@ -61,6 +63,7 @@ describe("LiveGameView", () => {
         step={activeStep}
         question={question}
         answerAck={null}
+        ownResult={null}
         isExpired={() => false}
         sendCommand={sendCommand}
       />,
@@ -85,6 +88,7 @@ describe("LiveGameView", () => {
         step={activeStep}
         question={question}
         answerAck={{ stepId: "step-1", optionId: "b" }}
+        ownResult={null}
         isExpired={() => false}
         sendCommand={vi.fn()}
       />,
@@ -102,6 +106,7 @@ describe("LiveGameView", () => {
         step={{ ...activeStep, status: "locked" }}
         question={question}
         answerAck={null}
+        ownResult={null}
         isExpired={() => false}
         sendCommand={vi.fn()}
       />,
@@ -118,6 +123,7 @@ describe("LiveGameView", () => {
         step={activeStep}
         question={question}
         answerAck={null}
+        ownResult={null}
         isExpired={() => true}
         sendCommand={vi.fn()}
       />,
@@ -128,5 +134,82 @@ describe("LiveGameView", () => {
     expect(screen.queryByTestId("live-question-view")).not.toBeInTheDocument();
     expect(screen.getByTestId("live-locked-view")).toBeInTheDocument();
     expect(screen.getByText(copy.liveLockedTitle)).toBeInTheDocument();
+  });
+
+  describe("result view (scoring capability, task 3.2)", () => {
+    const lockedStep: RoomStep = { ...activeStep, status: "locked" };
+
+    it("shows correct + points earned when own_result is correct with points", () => {
+      const ownResult: OwnResultMessage = { type: "own_result", stepId: "step-1", isCorrect: true, points: 5 };
+      render(
+        <LiveGameView
+          copy={copy}
+          step={lockedStep}
+          question={question}
+          answerAck={{ stepId: "step-1", optionId: "a" }}
+          ownResult={ownResult}
+          isExpired={() => false}
+          sendCommand={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByTestId("live-result-view")).toBeInTheDocument();
+      expect(screen.getByText(copy.liveResultCorrectTitle)).toBeInTheDocument();
+      expect(screen.getByText(new RegExp(String(5)))).toBeInTheDocument();
+      expect(screen.queryByTestId("live-locked-view")).not.toBeInTheDocument();
+    });
+
+    it("shows correct-but-no-points, distinct from an outright wrong answer, when own_result is correct with 0 points", () => {
+      const ownResult: OwnResultMessage = { type: "own_result", stepId: "step-1", isCorrect: true, points: 0 };
+      render(
+        <LiveGameView
+          copy={copy}
+          step={lockedStep}
+          question={question}
+          answerAck={{ stepId: "step-1", optionId: "a" }}
+          ownResult={ownResult}
+          isExpired={() => false}
+          sendCommand={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText(copy.liveResultCorrectNoPointsTitle)).toBeInTheDocument();
+      expect(screen.queryByText(copy.liveResultIncorrectTitle)).not.toBeInTheDocument();
+    });
+
+    it("shows incorrect when own_result is incorrect", () => {
+      const ownResult: OwnResultMessage = { type: "own_result", stepId: "step-1", isCorrect: false, points: 0 };
+      render(
+        <LiveGameView
+          copy={copy}
+          step={lockedStep}
+          question={question}
+          answerAck={null}
+          ownResult={ownResult}
+          isExpired={() => false}
+          sendCommand={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText(copy.liveResultIncorrectTitle)).toBeInTheDocument();
+    });
+
+    it("does not show a result for a different step's own_result", () => {
+      const ownResult: OwnResultMessage = { type: "own_result", stepId: "some-other-step", isCorrect: true, points: 5 };
+      render(
+        <LiveGameView
+          copy={copy}
+          step={lockedStep}
+          question={question}
+          answerAck={null}
+          ownResult={ownResult}
+          isExpired={() => false}
+          sendCommand={vi.fn()}
+        />,
+      );
+
+      expect(screen.queryByTestId("live-result-view")).not.toBeInTheDocument();
+      expect(screen.getByTestId("live-locked-view")).toBeInTheDocument();
+    });
   });
 });

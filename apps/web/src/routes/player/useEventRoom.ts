@@ -4,8 +4,11 @@ import {
   GRACE_MS,
   type AnswerAckMessage,
   type ErrorMessage,
+  type OwnResultMessage,
+  type RankingsMessage,
   type RoomStep,
   type StateMessage,
+  type StepResultsMessage,
 } from "@quiz/shared";
 
 export type RoomConnectionStatus = "connecting" | "open" | "closed";
@@ -23,6 +26,9 @@ export function useEventRoom(eventId: string, accessToken: string | undefined) {
   const [state, setState] = useState<StateMessage | null>(null);
   const [answerAck, setAnswerAck] = useState<{ stepId: string; optionId: string } | null>(null);
   const [lastError, setLastError] = useState<ErrorMessage | null>(null);
+  const [ownResult, setOwnResult] = useState<OwnResultMessage | null>(null);
+  const [stepResults, setStepResults] = useState<StepResultsMessage | null>(null);
+  const [rankings, setRankings] = useState<RankingsMessage | null>(null);
   const [clockOffsetMs, setClockOffsetMs] = useState(0);
   const [now, setNow] = useState(() => Date.now());
   const socketRef = useRef<PartySocket | null>(null);
@@ -52,6 +58,12 @@ export function useEventRoom(eventId: string, accessToken: string | undefined) {
         setAnswerAck({ stepId: ack.stepId, optionId: ack.optionId });
       } else if (message.type === "error") {
         setLastError(message as ErrorMessage);
+      } else if (message.type === "own_result") {
+        setOwnResult(message as OwnResultMessage);
+      } else if (message.type === "step_results") {
+        setStepResults(message as StepResultsMessage);
+      } else if (message.type === "rankings") {
+        setRankings(message as RankingsMessage);
       }
     });
 
@@ -79,5 +91,5 @@ export function useEventRoom(eventId: string, accessToken: string | undefined) {
     return now + clockOffsetMs > expiryMs;
   }
 
-  return { connectionStatus, state, answerAck, lastError, sendCommand, isExpired };
+  return { connectionStatus, state, answerAck, lastError, ownResult, stepResults, rankings, sendCommand, isExpired };
 }

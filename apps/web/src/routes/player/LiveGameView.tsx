@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { RoomQuestion, RoomStep } from "@quiz/shared";
+import type { OwnResultMessage, RoomQuestion, RoomStep } from "@quiz/shared";
 
 import { Button } from "@/components/ui/button";
 import type { PlayerCopy } from "@/routes/player/copy";
@@ -9,6 +9,7 @@ interface Props {
   step: RoomStep | null;
   question: RoomQuestion | null;
   answerAck: { stepId: string; optionId: string } | null;
+  ownResult: OwnResultMessage | null;
   isExpired: (step: RoomStep | null) => boolean;
   sendCommand: (type: string, payload?: unknown) => void;
 }
@@ -20,9 +21,15 @@ interface Props {
  * current step/answer state — no internal connection concerns, those live in
  * `useEventRoom`.
  */
-export function LiveGameView({ copy, step, question, answerAck, isExpired, sendCommand }: Props) {
+export function LiveGameView({ copy, step, question, answerAck, ownResult, isExpired, sendCommand }: Props) {
   if (!step || step.status === "pending") {
     return <WaitingView copy={copy} />;
+  }
+
+  // Once revealed, the player's own result supersedes every other view for
+  // this step (scoring capability: "the player sees their own result").
+  if (ownResult !== null && ownResult.stepId === step.id) {
+    return <ResultView copy={copy} result={ownResult} />;
   }
 
   const answered = answerAck !== null && answerAck.stepId === step.id;
@@ -93,6 +100,40 @@ function QuestionView({
       >
         {copy.liveQuestionConfirmButton}
       </Button>
+    </div>
+  );
+}
+
+/**
+ * The revealed result for the player's own step (scoring capability): never
+ * the correct option, other players' answers, or rankings — only whether
+ * *this* player was right and how many points they earned.
+ */
+function ResultView({ copy, result }: { copy: PlayerCopy; result: OwnResultMessage }) {
+  if (result.isCorrect && result.points > 0) {
+    return (
+      <div data-testid="live-result-view" className="flex flex-col items-center gap-2 text-center">
+        <h2 className="text-lg font-semibold">{copy.liveResultCorrectTitle}</h2>
+        <p className="text-muted-foreground text-sm">
+          {result.points} {copy.liveResultPointsEarnedSuffix}
+        </p>
+      </div>
+    );
+  }
+
+  if (result.isCorrect) {
+    return (
+      <div data-testid="live-result-view" className="flex flex-col items-center gap-2 text-center">
+        <h2 className="text-lg font-semibold">{copy.liveResultCorrectNoPointsTitle}</h2>
+        <p className="text-muted-foreground text-sm">{copy.liveResultCorrectNoPointsBody}</p>
+      </div>
+    );
+  }
+
+  return (
+    <div data-testid="live-result-view" className="flex flex-col items-center gap-2 text-center">
+      <h2 className="text-lg font-semibold">{copy.liveResultIncorrectTitle}</h2>
+      <p className="text-muted-foreground text-sm">{copy.liveResultIncorrectBody}</p>
     </div>
   );
 }

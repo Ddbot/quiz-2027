@@ -109,6 +109,56 @@ describe("useEventRoom", () => {
     );
   });
 
+  it("exposes own_result messages", async () => {
+    const { result } = renderHook(() => useEventRoom("evt-1", "token-abc"));
+    const socket = instances[0]!;
+
+    dispatchMessage(socket, { type: "own_result", stepId: "step-1", isCorrect: true, points: 5 });
+
+    await waitFor(() =>
+      expect(result.current.ownResult).toEqual({
+        type: "own_result",
+        stepId: "step-1",
+        isCorrect: true,
+        points: 5,
+      }),
+    );
+  });
+
+  it("exposes step_results messages", async () => {
+    const { result } = renderHook(() => useEventRoom("evt-1", "token-abc"));
+    const socket = instances[0]!;
+
+    dispatchMessage(socket, {
+      type: "step_results",
+      stepId: "step-1",
+      participants: [{ participantId: "p-1", isCorrect: true, points: 5 }],
+      teams: [{ teamId: "t-1", avgScore: 5, isWinner: true, awardedPoints: 10 }],
+    });
+
+    await waitFor(() => expect(result.current.stepResults?.stepId).toBe("step-1"));
+    expect(result.current.stepResults?.participants).toEqual([{ participantId: "p-1", isCorrect: true, points: 5 }]);
+  });
+
+  it("exposes rankings messages", async () => {
+    const { result } = renderHook(() => useEventRoom("evt-1", "token-abc"));
+    const socket = instances[0]!;
+
+    dispatchMessage(socket, {
+      type: "rankings",
+      individuals: [{ participantId: "p-1", displayName: "Alice", total: 5, rank: 1 }],
+      teams: [{ teamId: "t-1", name: "Team A", total: 10, rank: 1 }],
+    });
+
+    await waitFor(() => expect(result.current.rankings?.individuals).toHaveLength(1));
+    expect(result.current.rankings?.individuals[0]).toEqual({
+      participantId: "p-1",
+      displayName: "Alice",
+      total: 5,
+      rank: 1,
+    });
+  });
+
   it("sendCommand sends a JSON-encoded {type, payload} message", () => {
     const { result } = renderHook(() => useEventRoom("evt-1", "token-abc"));
     const socket = instances[0]!;
