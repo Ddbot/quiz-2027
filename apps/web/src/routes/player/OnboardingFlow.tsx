@@ -105,7 +105,7 @@ interface JoinedViewProps {
  */
 function JoinedView({ copy, event, participant }: JoinedViewProps) {
   const { session } = useAuth();
-  const { state, answerAck, sendCommand, isExpired } = useEventRoom(event.id, session?.access_token);
+  const { state, answerAck, ownResult, sendCommand, isExpired } = useEventRoom(event.id, session?.access_token);
   const effectiveStatus = state?.eventStatus ?? event.status;
 
   return (
@@ -123,6 +123,7 @@ function JoinedView({ copy, event, participant }: JoinedViewProps) {
           step={state.step}
           question={state.question}
           answerAck={answerAck}
+          ownResult={ownResult}
           isExpired={isExpired}
           sendCommand={sendCommand}
         />

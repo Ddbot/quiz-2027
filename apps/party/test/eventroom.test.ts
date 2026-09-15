@@ -88,7 +88,12 @@ interface StepFixture {
 async function createStep(
   eventId: string,
   position: number,
-  options: { timed?: boolean; countdownSeconds?: number } = {},
+  options: {
+    timed?: boolean;
+    countdownSeconds?: number;
+    pointsCorrect?: number;
+    teamAwardPoints?: number;
+  } = {},
 ): Promise<StepFixture> {
   const admin = adminClient();
   const { data: step, error: stepError } = await admin
@@ -98,6 +103,8 @@ async function createStep(
       position,
       timed: options.timed ?? false,
       countdown_seconds: options.countdownSeconds ?? 0,
+      points_correct: options.pointsCorrect ?? 1,
+      team_award_points: options.teamAwardPoints ?? 0,
     })
     .select()
     .single();
@@ -115,6 +122,43 @@ async function createStep(
   if (mcqError) throw new Error(`createStep game_mcq failed: ${mcqError.message}`);
 
   return { id: step.id as string, eventId, position };
+}
+
+/** Inserts a participant row for `user` in `eventId`, returning the participant id. */
+async function addParticipant(eventId: string, user: TestUser, displayName: string): Promise<string> {
+  const admin = adminClient();
+  const { data, error } = await admin
+    .from("participant")
+    .insert({ event_id: eventId, profile_id: user.profileId, display_name: displayName })
+    .select("id")
+    .single();
+  if (error || !data) throw new Error(`addParticipant failed: ${error?.message}`);
+  return data.id as string;
+}
+
+/** Creates a team and assigns `participantIds` to it, returning the team id. */
+async function createTeam(eventId: string, name: string, participantIds: string[]): Promise<string> {
+  const admin = adminClient();
+  const { data: team, error: teamError } = await admin
+    .from("team")
+    .insert({ event_id: eventId, name })
+    .select("id")
+    .single();
+  if (teamError || !team) throw new Error(`createTeam failed: ${teamError?.message}`);
+  for (const participantId of participantIds) {
+    const { error } = await admin.from("participant").update({ team_id: team.id }).eq("id", participantId);
+    if (error) throw new Error(`assigning team failed: ${error.message}`);
+  }
+  return team.id as string;
+}
+
+/** Runs a player through connect → answer:submit → close, in one step. */
+async function submitAnswer(room: string, player: TestUser, stepId: string, optionId: string): Promise<void> {
+  const ws = await connect(room, player.accessToken);
+  await waitForMessage(ws);
+  ws.send(JSON.stringify({ type: "answer:submit", payload: { stepId, optionId } }));
+  await waitForMessage(ws);
+  ws.close();
 }
 
 /** Creates a bare draft `event` row (no participant), returning its id. */
@@ -176,6 +220,14 @@ function waitForMessageOrTimeout(ws: WebSocket, ms = 200): Promise<Record<string
     }),
     new Promise<"timeout">((resolve) => setTimeout(() => resolve("timeout"), ms)),
   ]);
+}
+
+/** Consumes messages until one of the given type arrives, discarding the rest. */
+async function waitForMessageOfType(ws: WebSocket, type: string): Promise<Record<string, unknown>> {
+  for (;;) {
+    const message = await waitForMessage(ws);
+    if (message.type === type) return message;
+  }
 }
 
 /** Connects as `admin`, waits for the initial snapshot, then claims control. */
@@ -841,6 +893,289 @@ describe("answer:submit", () => {
 
     controllerWs.close();
   });
+});
+
+describe("mc:reveal", () => {
+  it("rejects a non-controller", async () => {
+    const admin = await trackedAdmin("reveal-noncontrol-admin");
+    const other = await trackedAdmin("reveal-noncontrol-other");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1);
+
+    const controllerWs = await connectAndClaimControl(eventId, admin);
+    controllerWs.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(controllerWs);
+    controllerWs.send(JSON.stringify({ type: "mc:lock" }));
+    await waitForMessage(controllerWs);
+
+    const otherWs = await connect(eventId, other.accessToken);
+    await waitForMessage(otherWs);
+    otherWs.send(JSON.stringify({ type: "mc:reveal" }));
+    const response = await waitForMessage(otherWs);
+    expect(response).toMatchObject({ type: "error", code: "forbidden" });
+
+    controllerWs.close();
+    otherWs.close();
+  });
+
+  it("rejects revealing a step that is still active", async () => {
+    const admin = await trackedAdmin("reveal-active-admin");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1);
+
+    const ws = await connectAndClaimControl(eventId, admin);
+    ws.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(ws); // step is active, never locked
+
+    ws.send(JSON.stringify({ type: "mc:reveal" }));
+    const response = await waitForMessage(ws);
+    expect(response).toMatchObject({ type: "error", code: "not_locked" });
+    ws.close();
+  });
+
+  it("rejects revealing when there is no current step", async () => {
+    const admin = await trackedAdmin("reveal-nostep-admin");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1);
+
+    // Connected and controlling, but mc:start was never sent.
+    const ws = await connectAndClaimControl(eventId, admin);
+    ws.send(JSON.stringify({ type: "mc:reveal" }));
+    const response = await waitForMessage(ws);
+    expect(response).toMatchObject({ type: "error", code: "not_locked" });
+    ws.close();
+  });
+
+  it("scores a locked step and matches hand-calculated results (happy path)", async () => {
+    const admin = await trackedAdmin("reveal-happy-admin");
+    const p1 = await trackedPlayer("reveal-happy-p1"); // correct, on team
+    const p2 = await trackedPlayer("reveal-happy-p2"); // correct, on team
+    const p3 = await trackedPlayer("reveal-happy-p3"); // incorrect, solo
+    const eventId = await makeDraftEvent();
+    const step = await createStep(eventId, 1, { pointsCorrect: 5, teamAwardPoints: 10 });
+
+    const pid1 = await addParticipant(eventId, p1, "P1");
+    const pid2 = await addParticipant(eventId, p2, "P2");
+    await addParticipant(eventId, p3, "P3");
+    const teamId = await createTeam(eventId, "Team Happy", [pid1, pid2]);
+
+    const controllerWs = await connectAndClaimControl(eventId, admin);
+    controllerWs.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(controllerWs);
+
+    await submitAnswer(eventId, p1, step.id, "a");
+    await submitAnswer(eventId, p2, step.id, "a");
+    await submitAnswer(eventId, p3, step.id, "b");
+
+    controllerWs.send(JSON.stringify({ type: "mc:lock" }));
+    await waitForMessage(controllerWs);
+
+    controllerWs.send(JSON.stringify({ type: "mc:reveal" }));
+    const stateAfterReveal = await waitForMessage(controllerWs);
+    expect(stateAfterReveal).toMatchObject({ type: "state", step: { status: "revealed" } });
+
+    const results = await waitForMessage(controllerWs);
+    expect(results.type).toBe("step_results");
+    expect(results.stepId).toBe(step.id);
+    expect(results.participants).toEqual(
+      expect.arrayContaining([
+        { participantId: pid1, isCorrect: true, points: 5 },
+        { participantId: pid2, isCorrect: true, points: 5 },
+      ]),
+    );
+    expect(results.teams).toEqual([{ teamId, avgScore: 5, isWinner: true, awardedPoints: 10 }]);
+    // The answer key must never appear in any broadcast.
+    expect(JSON.stringify(results)).not.toContain("correct_option_id");
+
+    const rankings = await waitForMessage(controllerWs);
+    expect(rankings.type).toBe("rankings");
+    expect(rankings.individuals).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ participantId: pid1, total: 5 }),
+        expect.objectContaining({ participantId: pid2, total: 5 }),
+      ]),
+    );
+
+    // Postgres actually persisted real is_correct/scored_points and the revealed status.
+    const answerRows = await adminClient().from("answer").select("participant_id, is_correct, scored_points").eq(
+      "step_id",
+      step.id,
+    );
+    expect(answerRows.data).toEqual(
+      expect.arrayContaining([
+        { participant_id: pid1, is_correct: true, scored_points: 5 },
+        { participant_id: pid2, is_correct: true, scored_points: 5 },
+      ]),
+    );
+    const stepRow = await adminClient().from("step").select("status").eq("id", step.id).single();
+    expect(stepRow.data?.status).toBe("revealed");
+
+    controllerWs.close();
+  });
+
+  it("sends each player their own personalised result, correct or not, submitter or not", async () => {
+    const admin = await trackedAdmin("reveal-own-admin");
+    const correctPlayer = await trackedPlayer("reveal-own-correct");
+    const silentPlayer = await trackedPlayer("reveal-own-silent"); // never submits
+    const eventId = await makeDraftEvent();
+    const step = await createStep(eventId, 1, { pointsCorrect: 3 });
+    await addParticipant(eventId, correctPlayer, "Correct");
+    await addParticipant(eventId, silentPlayer, "Silent");
+
+    const controllerWs = await connectAndClaimControl(eventId, admin);
+    controllerWs.send(JSON.stringify({ type: "mc:start" }));
+    const started = await waitForMessage(controllerWs);
+    const stepId = (started.step as { id: string }).id;
+
+    const correctWs = await connect(eventId, correctPlayer.accessToken);
+    await waitForMessage(correctWs);
+    correctWs.send(JSON.stringify({ type: "answer:submit", payload: { stepId, optionId: "a" } }));
+    await waitForMessage(correctWs); // ack
+
+    const silentWs = await connect(eventId, silentPlayer.accessToken);
+    await waitForMessage(silentWs);
+
+    controllerWs.send(JSON.stringify({ type: "mc:lock" }));
+    await Promise.all([waitForMessage(controllerWs), waitForMessage(correctWs), waitForMessage(silentWs)]);
+    controllerWs.send(JSON.stringify({ type: "mc:reveal" }));
+
+    const [ownForCorrect, ownForSilent] = await Promise.all([
+      waitForMessageOfType(correctWs, "own_result"),
+      waitForMessageOfType(silentWs, "own_result"),
+    ]);
+    expect(ownForCorrect).toEqual({ type: "own_result", stepId: step.id, isCorrect: true, points: 3 });
+    expect(ownForSilent).toEqual({ type: "own_result", stepId: step.id, isCorrect: false, points: 0 });
+
+    controllerWs.close();
+    correctWs.close();
+    silentWs.close();
+  });
+
+  it("a repeated reveal on an already-revealed step is a silent no-op", async () => {
+    const admin = await trackedAdmin("reveal-repeat-admin");
+    const eventId = await makeDraftEvent();
+    const step = await createStep(eventId, 1);
+
+    const ws = await connectAndClaimControl(eventId, admin);
+    ws.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(ws);
+    ws.send(JSON.stringify({ type: "mc:lock" }));
+    await waitForMessage(ws);
+    ws.send(JSON.stringify({ type: "mc:reveal" }));
+    await waitForMessage(ws); // state
+    await waitForMessage(ws); // step_results
+    await waitForMessage(ws); // rankings
+
+    ws.send(JSON.stringify({ type: "mc:reveal" }));
+    const second = await waitForMessageOrTimeout(ws);
+    expect(second).toBe("timeout");
+
+    const stepRow = await adminClient().from("step").select("status").eq("id", step.id).single();
+    expect(stepRow.data?.status).toBe("revealed");
+    ws.close();
+  });
+
+  it("a participant who joins after a step is revealed has no result for that step, and scores normally on the next one", async () => {
+    const admin = await trackedAdmin("reveal-latejoin-admin");
+    const early = await trackedPlayer("reveal-latejoin-early");
+    const late = await trackedPlayer("reveal-latejoin-late");
+    const eventId = await makeDraftEvent();
+    const step1 = await createStep(eventId, 1, { pointsCorrect: 2 });
+    const step2 = await createStep(eventId, 2, { pointsCorrect: 2 });
+    await addParticipant(eventId, early, "Early");
+
+    const controllerWs = await connectAndClaimControl(eventId, admin);
+    controllerWs.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(controllerWs);
+    await submitAnswer(eventId, early, step1.id, "a");
+    controllerWs.send(JSON.stringify({ type: "mc:lock" }));
+    await waitForMessage(controllerWs);
+    controllerWs.send(JSON.stringify({ type: "mc:reveal" }));
+    await waitForMessage(controllerWs); // state
+    await waitForMessage(controllerWs); // step_results
+    await waitForMessage(controllerWs); // rankings
+
+    // The late joiner arrives only now, after step 1 is already revealed.
+    const latePid = await addParticipant(eventId, late, "Late");
+
+    controllerWs.send(JSON.stringify({ type: "mc:advance" }));
+    await waitForMessage(controllerWs);
+    await submitAnswer(eventId, late, step2.id, "a");
+    controllerWs.send(JSON.stringify({ type: "mc:lock" }));
+    await waitForMessage(controllerWs);
+    controllerWs.send(JSON.stringify({ type: "mc:reveal" }));
+    await waitForMessage(controllerWs); // state
+    const step2Results = await waitForMessage(controllerWs); // step_results
+    expect(step2Results.participants).toEqual(
+      expect.arrayContaining([{ participantId: latePid, isCorrect: true, points: 2 }]),
+    );
+
+    const step1Row = await adminClient()
+      .from("step_result_participant")
+      .select("participant_id")
+      .eq("step_id", step1.id)
+      .eq("participant_id", latePid);
+    expect(step1Row.data).toEqual([]); // no row at all for the late joiner on step 1
+
+    controllerWs.close();
+  });
+
+  it(
+    "when every retry fails, sends reveal_failed, leaves the step locked, and broadcasts nothing",
+    async () => {
+      const admin = await trackedAdmin("reveal-fail-admin");
+      const observer = await trackedAdmin("reveal-fail-observer");
+      const doomedPlayer = await trackedPlayer("reveal-fail-doomed");
+      const eventId = await makeDraftEvent();
+      const step = await createStep(eventId, 1);
+      await addParticipant(eventId, doomedPlayer, "Doomed");
+
+      const controllerWs = await connectAndClaimControl(eventId, admin);
+      controllerWs.send(JSON.stringify({ type: "mc:start" }));
+      await waitForMessage(controllerWs);
+      await submitAnswer(eventId, doomedPlayer, step.id, "a");
+      controllerWs.send(JSON.stringify({ type: "mc:lock" }));
+      await waitForMessage(controllerWs);
+
+      // A second connection observes whether anything gets broadcast.
+      const observerWs = await connect(eventId, observer.accessToken);
+      await waitForMessage(observerWs);
+
+      // Simulate an external deletion between answering and reveal (e.g. a
+      // moderation/GDPR action): the participant row now referenced by this
+      // step's local_answer no longer exists in Postgres, so every attempt
+      // to write its `answer` row genuinely and deterministically fails a
+      // real foreign-key constraint — not a mock, not a flake.
+      const doomedParticipant = await adminClient()
+        .from("participant")
+        .select("id")
+        .eq("event_id", eventId)
+        .eq("profile_id", doomedPlayer.profileId)
+        .single();
+      await adminClient().from("participant").delete().eq("id", doomedParticipant.data!.id as string);
+
+      controllerWs.send(JSON.stringify({ type: "mc:reveal" }));
+      const response = await waitForMessage(controllerWs);
+      expect(response).toMatchObject({ type: "error", code: "reveal_failed" });
+
+      const observed = await waitForMessageOrTimeout(observerWs, 300);
+      expect(observed).toBe("timeout"); // nothing was broadcast to the other connection
+
+      const stepRow = await adminClient().from("step").select("status").eq("id", step.id).single();
+      expect(stepRow.data?.status).toBe("pending"); // Postgres step.status was never touched by MILESTONE-07 either
+
+      const stub = await getServerByName<Env, EventRoom>(env.EventRoom, eventId);
+      const persisted = await runInDurableObject(stub, (instance) => {
+        return instance.sql<{ data: string }>`select data from room_state where id = 0`;
+      });
+      const state = JSON.parse(persisted[0]!.data) as { step: { status: string } };
+      expect(state.step.status).toBe("locked"); // DO state was never mutated either
+
+      controllerWs.close();
+      observerWs.close();
+    },
+    15000,
+  );
 });
 
 describe("propagation timing (FR-031 acceptance)", () => {

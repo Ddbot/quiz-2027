@@ -5,16 +5,24 @@ import {
   applyMutation,
   defaultRoomState,
   GRACE_MS,
+  rankByTotal,
   requireFlowController,
+  scoreStep,
   toStateMessage,
   type AnswerAckMessage,
   type ClientCommand,
   type ErrorMessage,
+  type OwnResultMessage,
+  type ParticipantStepResult,
+  type RankingsMessage,
   type RoomQuestion,
   type RoomRole,
   type RoomState,
   type RoomStep,
+  type StepResultsMessage,
 } from "@quiz/shared";
+
+import { withRetry } from "./retry.js";
 
 /** Per-connection state, resolved once at connect time (event-room capability). */
 interface ConnState {
@@ -30,6 +38,28 @@ interface StepRow {
   position: number;
   timed: boolean;
   countdown_seconds: number;
+}
+
+/** A step's scoring configuration, read fresh at reveal time (never stored in `RoomState`). */
+interface RevealConfig {
+  pointsCorrect: number;
+  teamAwardPoints: number;
+  correctOptionId: string;
+}
+
+/** An event's full participant roster, as scoring/rankings need it. */
+interface RosterParticipant {
+  id: string;
+  team_id: string | null;
+  display_name: string;
+}
+
+/** Raw shape of a `local_answer` row this DO reads from its own SQLite. */
+interface LocalAnswerRow {
+  id: number;
+  participant_id: string;
+  option_id: string;
+  submitted_at: string;
 }
 
 const UNAUTHORIZED_CLOSE_CODE = 4001;
@@ -264,6 +294,9 @@ export class EventRoom extends Server<Env> {
       case "answer:submit":
         void this.handleAnswerSubmit(connection, command.payload);
         return;
+      case "mc:reveal":
+        void this.handleMcReveal(connection);
+        return;
       default:
         this.sendError(connection, "unknown_command", `Unknown command: ${command.type}`);
     }
@@ -449,6 +482,236 @@ export class EventRoom extends Server<Env> {
 
     const ack: AnswerAckMessage = { type: "answer_ack", stepId, optionId };
     connection.send(JSON.stringify(ack));
+  }
+
+  /** Reads a step's scoring config, never exposed via `RoomState`/broadcast. Null if not found. */
+  private async fetchRevealConfig(stepId: string): Promise<RevealConfig | null> {
+    const supabase = this.getSupabase();
+    const { data: stepRow, error: stepError } = await supabase
+      .from("step")
+      .select("points_correct, team_award_points")
+      .eq("id", stepId)
+      .maybeSingle();
+    if (stepError || !stepRow) return null;
+
+    const { data: mcqRow, error: mcqError } = await supabase
+      .from("game_mcq")
+      .select("correct_option_id")
+      .eq("step_id", stepId)
+      .maybeSingle();
+    if (mcqError || !mcqRow) return null;
+
+    return {
+      pointsCorrect: stepRow.points_correct as number,
+      teamAwardPoints: stepRow.team_award_points as number,
+      correctOptionId: mcqRow.correct_option_id as string,
+    };
+  }
+
+  /** The event's full current participant roster — every participant, not only submitters. */
+  private async fetchRoster(): Promise<RosterParticipant[]> {
+    const supabase = this.getSupabase();
+    const { data, error } = await supabase
+      .from("participant")
+      .select("id, team_id, display_name")
+      .eq("event_id", this.name);
+    if (error || !data) return [];
+    return data as RosterParticipant[];
+  }
+
+  private fetchLocalAnswers(stepId: string): LocalAnswerRow[] {
+    return this.sql<LocalAnswerRow>`select id, participant_id, option_id, submitted_at
+      from local_answer where step_id = ${stepId}`;
+  }
+
+  /**
+   * The event's cumulative individual/team rankings (design.md D5), recomputed
+   * fresh from every `step_result_participant`/`step_result_team` row so far
+   * — correct even after a DO restart, since Postgres is already the source
+   * of truth for every already-revealed step.
+   */
+  private async computeRankings(roster: RosterParticipant[]): Promise<RankingsMessage> {
+    const supabase = this.getSupabase();
+
+    const { data: stepRows } = await supabase.from("step").select("id").eq("event_id", this.name);
+    const stepIds = (stepRows ?? []).map((s) => s.id as string);
+
+    const individualTotals = new Map<string, number>();
+    const teamTotals = new Map<string, number>();
+    if (stepIds.length > 0) {
+      const { data: prRows } = await supabase
+        .from("step_result_participant")
+        .select("participant_id, points")
+        .in("step_id", stepIds);
+      for (const row of prRows ?? []) {
+        const participantId = row.participant_id as string;
+        individualTotals.set(participantId, (individualTotals.get(participantId) ?? 0) + (row.points as number));
+      }
+
+      const { data: trRows } = await supabase
+        .from("step_result_team")
+        .select("team_id, awarded_points")
+        .in("step_id", stepIds);
+      for (const row of trRows ?? []) {
+        const teamId = row.team_id as string;
+        teamTotals.set(teamId, (teamTotals.get(teamId) ?? 0) + (row.awarded_points as number));
+      }
+    }
+
+    const { data: teamRows } = await supabase
+      .from("team")
+      .select("id, name")
+      .eq("event_id", this.name)
+      .eq("dissolved", false);
+
+    const individualRanked = rankByTotal(roster.map((p) => ({ id: p.id, total: individualTotals.get(p.id) ?? 0 })));
+    const teamRanked = rankByTotal(
+      (teamRows ?? []).map((t) => ({ id: t.id as string, total: teamTotals.get(t.id as string) ?? 0 })),
+    );
+    const displayNameById = new Map(roster.map((p) => [p.id, p.display_name]));
+    const teamNameById = new Map((teamRows ?? []).map((t) => [t.id as string, t.name as string]));
+
+    return {
+      type: "rankings",
+      individuals: individualRanked.map((r) => ({
+        participantId: r.id,
+        displayName: displayNameById.get(r.id) ?? "",
+        total: r.total,
+        rank: r.rank,
+      })),
+      teams: teamRanked.map((r) => ({
+        teamId: r.id,
+        name: teamNameById.get(r.id) ?? "",
+        total: r.total,
+        rank: r.rank,
+      })),
+    };
+  }
+
+  /**
+   * `mc:reveal` (design.md D2/D3/D4/D5) — scores the just-locked step,
+   * persists to Postgres with retry, then transitions/broadcasts only once
+   * that flush has actually succeeded (design.md D4: persist-then-transition).
+   */
+  private async handleMcReveal(connection: Connection<ConnState>): Promise<void> {
+    if (!this.requireController(connection)) return;
+
+    const step = this.#state.step;
+    if (step && step.status === "revealed") return; // idempotent no-op — already done.
+    if (!step || step.status !== "locked") {
+      this.sendError(connection, "not_locked", "This step must be locked before it can be revealed");
+      return;
+    }
+
+    const config = await this.fetchRevealConfig(step.id);
+    if (!config) {
+      this.sendError(connection, "reveal_failed", "Could not load this step's scoring configuration");
+      return;
+    }
+
+    const roster = await this.fetchRoster();
+    const localAnswers = this.fetchLocalAnswers(step.id);
+
+    const scoringResult = scoreStep({
+      timed: step.timed,
+      pointsCorrect: config.pointsCorrect,
+      teamAwardPoints: config.teamAwardPoints,
+      correctOptionId: config.correctOptionId,
+      answers: localAnswers.map((a) => ({
+        participantId: a.participant_id,
+        optionId: a.option_id,
+        submittedAt: a.submitted_at,
+        receiptSeq: a.id,
+      })),
+      participants: roster.map((p) => ({ id: p.id, teamId: p.team_id })),
+    });
+    const resultByParticipant = new Map(scoringResult.participants.map((r) => [r.participantId, r]));
+
+    const answerRows = localAnswers.map((a) => {
+      const result = resultByParticipant.get(a.participant_id) as ParticipantStepResult | undefined;
+      return {
+        step_id: step.id,
+        participant_id: a.participant_id,
+        option_id: a.option_id,
+        submitted_at: a.submitted_at,
+        receipt_seq: a.id,
+        is_correct: result?.isCorrect ?? false,
+        scored_points: result?.points ?? 0,
+      };
+    });
+    const participantResultRows = scoringResult.participants.map((r) => ({
+      step_id: step.id,
+      participant_id: r.participantId,
+      points: r.points,
+    }));
+    const teamResultRows = scoringResult.teams.map((t) => ({
+      step_id: step.id,
+      team_id: t.teamId,
+      avg_score: t.avgScore,
+      is_winner: t.isWinner,
+      awarded_points: t.awardedPoints,
+    }));
+
+    const flushed = await withRetry(async () => {
+      const supabase = this.getSupabase();
+      if (answerRows.length > 0) {
+        const { error } = await supabase.from("answer").upsert(answerRows, { onConflict: "step_id,participant_id" });
+        if (error) throw new Error(error.message);
+      }
+      if (participantResultRows.length > 0) {
+        const { error } = await supabase
+          .from("step_result_participant")
+          .upsert(participantResultRows, { onConflict: "step_id,participant_id" });
+        if (error) throw new Error(error.message);
+      }
+      if (teamResultRows.length > 0) {
+        const { error } = await supabase
+          .from("step_result_team")
+          .upsert(teamResultRows, { onConflict: "step_id,team_id" });
+        if (error) throw new Error(error.message);
+      }
+      const { error: stepError } = await supabase.from("step").update({ status: "revealed" }).eq("id", step.id);
+      if (stepError) throw new Error(stepError.message);
+    });
+
+    if (!flushed) {
+      this.sendError(connection, "reveal_failed", "Could not persist this step's results — try again");
+      return;
+    }
+
+    const { state: nextState, changed } = applyMutation(this.#state, (current) => {
+      if (!current.step || current.step.id !== step.id || current.step.status !== "locked") return current;
+      return { ...current, step: { ...current.step, status: "revealed" } };
+    });
+    this.#state = nextState;
+    if (!changed) return; // stale guard — the step moved on some other way while this was in flight.
+
+    this.persistState();
+    this.broadcastState();
+
+    const stepResults: StepResultsMessage = {
+      type: "step_results",
+      stepId: step.id,
+      participants: scoringResult.participants,
+      teams: scoringResult.teams,
+    };
+    this.broadcast(JSON.stringify(stepResults));
+
+    const rankings = await this.computeRankings(roster);
+    this.broadcast(JSON.stringify(rankings));
+
+    for (const otherConnection of this.getConnections<ConnState>()) {
+      const otherState = otherConnection.state;
+      if (!otherState || otherState.role !== "player" || !otherState.participantId) continue;
+      const own = resultByParticipant.get(otherState.participantId);
+      const ownResult: OwnResultMessage = {
+        type: "own_result",
+        stepId: step.id,
+        isCorrect: own?.isCorrect ?? false,
+        points: own?.points ?? 0,
+      };
+      otherConnection.send(JSON.stringify(ownResult));
+    }
   }
 
   private sendState(connection: Connection<ConnState>): void {
