@@ -3,6 +3,7 @@ import { useState, type FormEvent } from "react";
 import { getPlayerCopy } from "@/routes/player/copy";
 import { IdentityStep, type PendingJoin } from "@/routes/player/IdentityStep";
 import { NameConfirmStep } from "@/routes/player/NameConfirmStep";
+import { TeamLobbyStep } from "@/routes/player/TeamLobbyStep";
 import type { EventSummary } from "@/routes/player/types";
 import { useJoinEvent } from "@/routes/player/useJoinEvent";
 import { Button } from "@/components/ui/button";
@@ -30,9 +31,14 @@ export function OnboardingFlow({ event }: { event: EventSummary }) {
   if (step.name === "confirm-name") {
     if (status === "joined" && participant) {
       return (
-        <div className="flex flex-col gap-2 text-center">
-          <h2 className="text-lg font-semibold">{copy.joinedTitle}</h2>
-          <p data-testid="joined-display-name">{participant.display_name}</p>
+        <div className="flex w-full flex-col gap-4">
+          <div className="flex flex-col gap-2 text-center">
+            <h2 className="text-lg font-semibold">{copy.joinedTitle}</h2>
+            <p data-testid="joined-display-name">{participant.display_name}</p>
+          </div>
+          {event.status === "draft" && (
+            <TeamLobbyStep copy={copy} eventId={event.id} participantId={participant.id} />
+          )}
         </div>
       );
     }

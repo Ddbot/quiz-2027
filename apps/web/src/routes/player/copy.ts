@@ -47,6 +47,18 @@ export const playerCopy = {
     errorEventNotJoinable: "Cet événement est terminé et n'accepte plus de nouveaux joueurs.",
     errorGeneric: "Une erreur est survenue. Merci de réessayer.",
     retryButton: "Réessayer",
+
+    teamLobbyTitle: "Équipe",
+    teamLobbySoloIntro: "Vous jouez en solo pour l'instant. Créez une équipe ou rejoignez-en une.",
+    teamNameLabel: "Nom de l'équipe",
+    createTeamButton: "Créer une équipe",
+    joinTeamButton: "Rejoindre",
+    leaveTeamButton: "Quitter l'équipe",
+    renameTeamButton: "Renommer",
+    currentTeamLabel: "Votre équipe",
+    noTeamsAvailable: "Aucune équipe pour le moment. Soyez la première à en créer une !",
+    teamErrorNameTaken: "Ce nom d'équipe est déjà pris. Merci d'en choisir un autre.",
+    teamErrorNotCaptain: "Seul le ou la capitaine peut renommer l'équipe.",
   },
   en: {
     heading: "Quiz 2027",
@@ -90,6 +102,18 @@ export const playerCopy = {
     errorEventNotJoinable: "This event has ended and is no longer accepting new players.",
     errorGeneric: "Something went wrong. Please try again.",
     retryButton: "Retry",
+
+    teamLobbyTitle: "Team",
+    teamLobbySoloIntro: "You're playing solo for now. Create a team or join one.",
+    teamNameLabel: "Team name",
+    createTeamButton: "Create a team",
+    joinTeamButton: "Join",
+    leaveTeamButton: "Leave team",
+    renameTeamButton: "Rename",
+    currentTeamLabel: "Your team",
+    noTeamsAvailable: "No teams yet. Be the first to create one!",
+    teamErrorNameTaken: "That team name is already taken. Please choose another one.",
+    teamErrorNotCaptain: "Only the captain can rename the team.",
   },
 } as const;
 
