@@ -1,6 +1,7 @@
-import { Navigate, Route, Routes } from "react-router-dom";
+import { Route, Routes } from "react-router-dom";
 
 import { AdminRoute } from "@/routes/AdminRoute";
+import { JoinCodeLandingRoute } from "@/routes/JoinCodeLandingRoute";
 import { PrivacyRoute } from "@/routes/legal/PrivacyRoute";
 import { TermsRoute } from "@/routes/legal/TermsRoute";
 import { PlayerRoute } from "@/routes/PlayerRoute";
@@ -8,13 +9,15 @@ import { ScreenRoute } from "@/routes/ScreenRoute";
 
 /**
  * Top-level route tree. The player route runs the real onboarding flow
- * (MILESTONE-03); admin and big-screen are still placeholder shells pending
- * their own milestones.
+ * (MILESTONE-03); big-screen is still a placeholder shell pending its own
+ * milestone. `/` is the join-code landing page (FR-001's "manual entry")
+ * — it used to redirect straight to `/admin`, a MILESTONE-01 scaffold
+ * placeholder nobody had replaced since.
  */
 export function App() {
   return (
     <Routes>
-      <Route path="/" element={<Navigate to="/admin" replace />} />
+      <Route path="/" element={<JoinCodeLandingRoute />} />
       <Route path="/e/:joinCode" element={<PlayerRoute />} />
       <Route path="/admin/*" element={<AdminRoute />} />
       <Route path="/screen/:eventId" element={<ScreenRoute />} />
