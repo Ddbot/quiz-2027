@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -28,13 +28,29 @@ vi.mock("partysocket", () => ({
   }),
 }));
 
-const { getSession, onAuthStateChange } = vi.hoisted(() => ({
+const { getSession, onAuthStateChange, from, rpc } = vi.hoisted(() => ({
   getSession: vi.fn(),
   onAuthStateChange: vi.fn(),
+  from: vi.fn(),
+  rpc: vi.fn(),
 }));
 
+// The moderation section (ModerationSection/useModeration) fetches via
+// `supabase.from(...)` on mount, independently of the WebSocket connection
+// the flow-control tests above exercise. A query that never resolves keeps
+// its effect from throwing without affecting those tests' assertions — see
+// mc:show_leaderboard/mc:end's own describe block for tests that DO exercise
+// moderation content, where `from`/`rpc` are given real resolved values.
+function pendingQuery(): PromiseLike<never> & Record<string, () => unknown> {
+  const query = new Promise<never>(() => {}) as unknown as PromiseLike<never> & Record<string, () => unknown>;
+  query.select = () => pendingQuery();
+  query.eq = () => pendingQuery();
+  return query;
+}
+from.mockImplementation(() => pendingQuery());
+
 vi.mock("@/lib/supabase", () => ({
-  supabase: { auth: { getSession, onAuthStateChange } },
+  supabase: { auth: { getSession, onAuthStateChange }, from, rpc },
 }));
 
 const { AuthProvider } = await import("@/components/AuthProvider");
@@ -63,6 +79,7 @@ beforeEach(() => {
     data: { session: { user: { id: "admin-1" }, access_token: "admin-token" } },
   });
   onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } });
+  from.mockImplementation(() => pendingQuery());
   vi.stubGlobal("open", vi.fn());
 });
 
@@ -196,6 +213,124 @@ describe("LiveControlPage — mc:show_leaderboard and mc:end", () => {
 
     await user.click(screen.getByRole("button", { name: /terminer l'événement/i }));
     expect(JSON.parse(socket.sent.at(-1)!)).toEqual({ type: "mc:end", payload: undefined });
+  });
+});
+
+describe("LiveControlPage — mc:kill_switch", () => {
+  it("activates the kill switch", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await waitFor(() => expect(socketInstances).toHaveLength(1));
+    const socket = socketInstances[0]!;
+
+    await user.click(screen.getByRole("button", { name: /activer le coupe-circuit/i }));
+    expect(JSON.parse(socket.sent.at(-1)!)).toEqual({ type: "mc:kill_switch", payload: { on: true } });
+  });
+
+  it("clears the kill switch once active, and shows the active notice", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await waitFor(() => expect(socketInstances).toHaveLength(1));
+    const socket = socketInstances[0]!;
+
+    dispatchMessage(socket, {
+      type: "state",
+      eventStatus: "live",
+      step: null,
+      question: null,
+      display: "waiting",
+      controllerId: "admin-1",
+      killSwitch: true,
+      serverNow: new Date().toISOString(),
+    });
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/coupe-circuit est actif/i);
+    await user.click(screen.getByRole("button", { name: /désactiver le coupe-circuit/i }));
+    expect(JSON.parse(socket.sent.at(-1)!)).toEqual({ type: "mc:kill_switch", payload: { on: false } });
+  });
+});
+
+describe("LiveControlPage — moderation section", () => {
+  function mockRoster() {
+    from.mockImplementation((table: string) => {
+      if (table === "participant") {
+        return {
+          select: () => ({
+            eq: () =>
+              Promise.resolve({
+                data: [{ id: "p-1", display_name: "Alice", hidden: false }],
+                error: null,
+              }),
+          }),
+        };
+      }
+      if (table === "team") {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => Promise.resolve({ data: [{ id: "t-1", name: "Alpha", hidden: false }], error: null }),
+            }),
+          }),
+        };
+      }
+      throw new Error(`unexpected table ${table}`);
+    });
+  }
+
+  it("lists participants and teams", async () => {
+    mockRoster();
+    renderPage();
+
+    expect(await screen.findByTestId("moderation-row-p-1")).toHaveTextContent("Alice");
+    expect(screen.getByTestId("moderation-row-t-1")).toHaveTextContent("Alpha");
+  });
+
+  it("renders for a draft event, not only a live one (design.md D5)", async () => {
+    mockRoster();
+    renderPage();
+    const socket = await waitFor(() => {
+      expect(socketInstances).toHaveLength(1);
+      return socketInstances[0]!;
+    });
+    dispatchMessage(socket, {
+      type: "state",
+      eventStatus: "draft",
+      step: null,
+      question: null,
+      display: "waiting",
+      controllerId: null,
+      serverNow: new Date().toISOString(),
+    });
+
+    expect(await screen.findByTestId("moderation-row-p-1")).toBeInTheDocument();
+  });
+
+  it("hides a participant via moderate_participant", async () => {
+    mockRoster();
+    rpc.mockResolvedValue({ error: null });
+    const user = userEvent.setup();
+    renderPage();
+
+    const row = await screen.findByTestId("moderation-row-p-1");
+    await user.click(within(row).getByRole("button", { name: /^masquer$/i }));
+
+    expect(rpc).toHaveBeenCalledWith("moderate_participant", { p_participant_id: "p-1", p_hidden: true });
+  });
+
+  it("renames a team via moderate_team", async () => {
+    mockRoster();
+    rpc.mockResolvedValue({ error: null });
+    const user = userEvent.setup();
+    renderPage();
+
+    const row = await screen.findByTestId("moderation-row-t-1");
+    await user.click(within(row).getByRole("button", { name: /renommer/i }));
+    const input = within(row).getByPlaceholderText(/nouveau nom/i);
+    await user.clear(input);
+    await user.type(input, "Beta");
+    await user.click(within(row).getByRole("button", { name: /renommer/i }));
+
+    expect(rpc).toHaveBeenCalledWith("moderate_team", { p_team_id: "t-1", p_name: "Beta" });
   });
 });
 

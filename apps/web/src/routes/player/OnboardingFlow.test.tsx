@@ -287,6 +287,57 @@ describe("OnboardingFlow", () => {
     expect(screen.queryByRole("heading", { name: /équipe/i })).not.toBeInTheDocument();
   });
 
+  it("blanks the joined view once the room broadcasts killSwitch true, and resumes once cleared (moderation-kill-switch)", async () => {
+    const liveEventFr = { ...draftEventFr, status: "live" as const };
+    const user = userEvent.setup();
+    getSession.mockResolvedValue({
+      data: { session: { access_token: "test-token", user: { id: "u-1" } } },
+    });
+    signInAnonymously.mockResolvedValue({ error: null });
+    rpc.mockResolvedValue({
+      data: { participant: { id: "p-1", display_name: "Alice" }, event: { id: liveEventFr.id } },
+      error: null,
+    });
+
+    renderFlow(liveEventFr);
+
+    await user.type(screen.getByLabelText(/nom affiché/i), "Alice");
+    await user.click(screen.getByLabelText(/plus de 16 ans/i));
+    await user.click(screen.getByLabelText(/conditions d'utilisation/i));
+    await user.click(screen.getByRole("button", { name: /continuer/i }));
+    await user.click(screen.getByRole("button", { name: /confirmer et rejoindre/i }));
+
+    await waitFor(() => expect(screen.getByTestId("joined-display-name")).toHaveTextContent("Alice"));
+    await waitFor(() => expect(socketInstances).toHaveLength(1));
+    const socket = socketInstances[0]!;
+
+    function sendState(overrides: Record<string, unknown>) {
+      socket.dispatchEvent(
+        new MessageEvent("message", {
+          data: JSON.stringify({
+            type: "state",
+            eventStatus: "live",
+            step: null,
+            question: null,
+            display: "waiting",
+            controllerId: "admin-1",
+            killSwitch: false,
+            serverNow: new Date().toISOString(),
+            ...overrides,
+          }),
+        }),
+      );
+    }
+
+    sendState({ killSwitch: true });
+    expect(await screen.findByTestId("killswitch-overlay")).toBeInTheDocument();
+    expect(screen.queryByTestId("joined-display-name")).not.toBeInTheDocument();
+
+    sendState({ killSwitch: false });
+    await waitFor(() => expect(screen.getByTestId("joined-display-name")).toHaveTextContent("Alice"));
+    expect(screen.queryByTestId("killswitch-overlay")).not.toBeInTheDocument();
+  });
+
   it("account creation succeeds with marketing consent left unchecked", async () => {
     const user = userEvent.setup();
     signUp.mockResolvedValue({ data: { session: { user: {} } }, error: null });
@@ -370,6 +421,35 @@ describe("OnboardingFlow", () => {
     );
     // identity was never re-collected — signInAnonymously only ran once
     expect(signInAnonymously).toHaveBeenCalledTimes(1);
+  });
+
+  it("flags a profane name client-side before any round trip, then joins once retyped clean (moderation-kill-switch)", async () => {
+    const user = userEvent.setup();
+    signInAnonymously.mockResolvedValue({ error: null });
+    rpc.mockResolvedValue({
+      data: { participant: { id: "p-4", display_name: "CleanName" }, event: { id: draftEventFr.id } },
+      error: null,
+    });
+
+    renderFlow();
+
+    await user.type(screen.getByLabelText(/nom affiché/i), "such a bitch");
+    await user.click(screen.getByLabelText(/plus de 16 ans/i));
+    await user.click(screen.getByLabelText(/conditions d'utilisation/i));
+    await user.click(screen.getByRole("button", { name: /continuer/i }));
+    await user.click(await screen.findByRole("button", { name: /confirmer et rejoindre/i }));
+
+    // The rejection appears without ever calling the server RPC.
+    expect(await screen.findByRole("alert")).toHaveTextContent(/n'est pas autorisé/i);
+    expect(rpc).not.toHaveBeenCalled();
+
+    const nameInput = await screen.findByLabelText(/nom affiché/i);
+    await user.clear(nameInput);
+    await user.type(nameInput, "CleanName");
+    await user.click(screen.getByRole("button", { name: /réessayer/i }));
+
+    await waitFor(() => expect(screen.getByTestId("joined-display-name")).toHaveTextContent("CleanName"));
+    expect(rpc).toHaveBeenCalledTimes(1);
   });
 
   it("renders English copy for an English event", async () => {

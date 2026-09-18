@@ -96,4 +96,26 @@ describe("useTeamLobby", () => {
     expect(ok).toBe(false);
     await waitFor(() => expect(result.current.actionError).toBe("name_taken"));
   });
+
+  it("createTeam flags a profane name client-side without calling the RPC (moderation-kill-switch)", async () => {
+    mockFrom();
+    const { result } = renderHook(() => useTeamLobby("evt-1", "participant-1"));
+    await waitFor(() => expect(result.current.status).toBe("loaded"));
+
+    const ok = await result.current.createTeam("such a bitch of a team");
+    expect(ok).toBe(false);
+    await waitFor(() => expect(result.current.actionError).toBe("profanity"));
+    expect(rpc).not.toHaveBeenCalled();
+  });
+
+  it("renameTeam flags a profane name client-side without calling the RPC (moderation-kill-switch)", async () => {
+    mockFrom();
+    const { result } = renderHook(() => useTeamLobby("evt-1", "participant-1"));
+    await waitFor(() => expect(result.current.status).toBe("loaded"));
+
+    const ok = await result.current.renameTeam("team-1", "such a bitch of a team");
+    expect(ok).toBe(false);
+    await waitFor(() => expect(result.current.actionError).toBe("profanity"));
+    expect(rpc).not.toHaveBeenCalled();
+  });
 });

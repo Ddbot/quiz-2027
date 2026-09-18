@@ -101,6 +101,23 @@ export const adminCopy = {
 
   castButton: "Caster vers un écran",
   castFallbackNotice: "L'API de présentation n'est pas disponible ; une nouvelle fenêtre s'ouvre à la place.",
+
+  moderationSectionTitle: "Modération",
+  moderationParticipantsTitle: "Participants",
+  moderationTeamsTitle: "Équipes",
+  moderationNoParticipants: "Aucun participant pour le moment.",
+  moderationNoTeams: "Aucune équipe pour le moment.",
+  moderationHideButton: "Masquer",
+  moderationShowButton: "Afficher",
+  moderationRenameButton: "Renommer",
+  moderationRenameCancel: "Annuler",
+  moderationRenamePlaceholder: "Nouveau nom",
+  moderationHiddenBadge: "Masqué",
+  moderationActionError: "L'action a échoué. Merci de réessayer.",
+
+  killSwitchButton: "Activer le coupe-circuit",
+  killSwitchClearButton: "Désactiver le coupe-circuit",
+  killSwitchActiveNotice: "Le coupe-circuit est actif : tous les écrans et téléphones sont masqués.",
 } as const;
 
 export type AdminCopy = typeof adminCopy;

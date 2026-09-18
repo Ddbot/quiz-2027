@@ -55,6 +55,17 @@ export interface McEndCommand extends ClientCommand {
   type: "mc:end";
 }
 
+/**
+ * `mc:kill_switch` (event-room capability) — any admin, not flow-controller-gated
+ * (moderation-kill-switch design.md D3, same shape as `mc:claim_control`/
+ * `operator:display`). Blanks/freezes every connection when `on: true`, clears
+ * it when `on: false`.
+ */
+export interface McKillSwitchCommand extends ClientCommand {
+  type: "mc:kill_switch";
+  payload: { on: boolean };
+}
+
 /** Server → Client `state` message (SPEC.md §7.4.2), sent on connect/reconnect and every change. */
 export interface StateMessage {
   type: "state";
@@ -63,6 +74,8 @@ export interface StateMessage {
   question: RoomState["question"];
   display: RoomState["display"];
   controllerId: RoomState["controllerId"];
+  /** Whether the admin kill switch is currently active (moderation-kill-switch design.md D3). */
+  killSwitch: RoomState["killSwitch"];
   /** Server clock reference (FR-032) — computed fresh per send, never persisted. */
   serverNow: string;
 }
@@ -126,6 +139,7 @@ export function toStateMessage(state: RoomState, serverNow: string): StateMessag
     question: state.question,
     display: state.display,
     controllerId: state.controllerId,
+    killSwitch: state.killSwitch,
     serverNow,
   };
 }

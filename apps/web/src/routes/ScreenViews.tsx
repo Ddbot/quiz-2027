@@ -11,6 +11,8 @@ interface Props {
   rankings: RoomRankings | null;
   mediaUrl: string | null;
   countdownTarget: string | null;
+  /** Admin kill switch (moderation-kill-switch design.md D3) — takes priority over `display`. */
+  killSwitch: boolean;
 }
 
 /**
@@ -18,8 +20,25 @@ interface Props {
  * capability, FR-062). Every view is high-contrast/large-format and visually
  * distinct from the player app (FR-060) — none of these components are
  * shared with `LiveGameView`.
+ *
+ * The kill switch takes priority over `display` (moderation-kill-switch
+ * design.md D3): `display`/the current step are never touched by
+ * `mc:kill_switch`, so this is a single early-return guard, not a new state
+ * machine — clearing it needs no "restore" logic, the switch below just
+ * resumes reading `display` again.
  */
-export function BigScreenView({ copy, display, question, stepResults, rankings, mediaUrl, countdownTarget }: Props) {
+export function BigScreenView({
+  copy,
+  display,
+  question,
+  stepResults,
+  rankings,
+  mediaUrl,
+  countdownTarget,
+  killSwitch,
+}: Props) {
+  if (killSwitch) return <KillSwitchOverlay />;
+
   switch (display) {
     case "question":
       return <QuestionView copy={copy} question={question} />;
@@ -242,4 +261,9 @@ function LeaderboardView({
 
 function BlankView() {
   return <div data-testid="screen-blank-view" className="h-full w-full" />;
+}
+
+/** The kill switch's blanking overlay (moderation-kill-switch) — visually identical to `BlankView`, distinct testid. */
+function KillSwitchOverlay() {
+  return <div data-testid="screen-killswitch-overlay" className="h-full w-full bg-black" />;
 }

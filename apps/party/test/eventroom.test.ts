@@ -920,6 +920,210 @@ describe("answer:submit", () => {
 
     controllerWs.close();
   });
+
+  it("rejects an answer while the kill switch is active, writing no local_answer row (moderation-kill-switch design.md D3)", async () => {
+    const admin = await trackedAdmin("answer-killswitch-admin");
+    const player = await trackedPlayer("answer-killswitch-player");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1);
+    await adminClient()
+      .from("participant")
+      .insert({ event_id: eventId, profile_id: player.profileId, display_name: "KillSwitchPlayer" });
+
+    const controllerWs = await connectAndClaimControl(eventId, admin);
+    controllerWs.send(JSON.stringify({ type: "mc:start" }));
+    const started = await waitForMessage(controllerWs);
+    const stepId = (started.step as { id: string }).id;
+
+    controllerWs.send(JSON.stringify({ type: "mc:kill_switch", payload: { on: true } }));
+    await waitForMessage(controllerWs);
+
+    const playerWs = await connect(eventId, player.accessToken);
+    await waitForMessage(playerWs);
+    playerWs.send(JSON.stringify({ type: "answer:submit", payload: { stepId, optionId: "a" } }));
+    const response = await waitForMessage(playerWs);
+    expect(response).toMatchObject({ type: "error", code: "kill_switch_active" });
+
+    const stub = await getServerByName<Env, EventRoom>(env.EventRoom, eventId);
+    const rows = await runInDurableObject(stub, (instance) => {
+      return instance.sql<{ id: number }>`select id from local_answer where step_id = ${stepId}`;
+    });
+    expect(rows).toHaveLength(0);
+
+    controllerWs.close();
+    playerWs.close();
+  });
+});
+
+describe("mc:kill_switch", () => {
+  it("an admin activates it, broadcasting state with killSwitch true", async () => {
+    const admin = await trackedAdmin("killswitch-admin");
+    const ws = await connect(`killswitch-room-${crypto.randomUUID()}`, admin.accessToken);
+    const initial = await waitForMessage(ws);
+    expect(initial).toMatchObject({ type: "state", killSwitch: false });
+
+    ws.send(JSON.stringify({ type: "mc:kill_switch", payload: { on: true } }));
+    const update = await waitForMessage(ws);
+    expect(update).toMatchObject({ type: "state", killSwitch: true });
+    ws.close();
+  });
+
+  it("an admin clears it after activating, restoring killSwitch false", async () => {
+    const admin = await trackedAdmin("killswitch-clear-admin");
+    const ws = await connect(`killswitch-clear-room-${crypto.randomUUID()}`, admin.accessToken);
+    await waitForMessage(ws);
+
+    ws.send(JSON.stringify({ type: "mc:kill_switch", payload: { on: true } }));
+    await waitForMessage(ws);
+
+    ws.send(JSON.stringify({ type: "mc:kill_switch", payload: { on: false } }));
+    const update = await waitForMessage(ws);
+    expect(update).toMatchObject({ type: "state", killSwitch: false });
+    ws.close();
+  });
+
+  it("does not mutate display or step (only killSwitch changes)", async () => {
+    const admin = await trackedAdmin("killswitch-unaffected-admin");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1);
+
+    const ws = await connectAndClaimControl(eventId, admin);
+    ws.send(JSON.stringify({ type: "mc:start" }));
+    const started = await waitForMessage(ws);
+    ws.send(JSON.stringify({ type: "operator:display", payload: { view: "leaderboard" } }));
+    await waitForMessage(ws);
+
+    ws.send(JSON.stringify({ type: "mc:kill_switch", payload: { on: true } }));
+    const activated = await waitForMessage(ws);
+    expect(activated).toMatchObject({
+      type: "state",
+      killSwitch: true,
+      display: "leaderboard",
+      step: { id: (started.step as { id: string }).id, status: "active" },
+    });
+
+    ws.send(JSON.stringify({ type: "mc:kill_switch", payload: { on: false } }));
+    const cleared = await waitForMessage(ws);
+    expect(cleared).toMatchObject({
+      type: "state",
+      killSwitch: false,
+      display: "leaderboard",
+      step: { id: (started.step as { id: string }).id, status: "active" },
+    });
+
+    ws.close();
+  });
+
+  it("rejects a non-admin", async () => {
+    const player = await trackedPlayer("killswitch-player");
+    const eventId = await createEventWithParticipant(player);
+    const ws = await connect(eventId, player.accessToken);
+    await waitForMessage(ws);
+
+    ws.send(JSON.stringify({ type: "mc:kill_switch", payload: { on: true } }));
+    const response = await waitForMessage(ws);
+    expect(response).toMatchObject({ type: "error", code: "forbidden" });
+    ws.close();
+  });
+
+  it("rejects an invalid payload", async () => {
+    const admin = await trackedAdmin("killswitch-invalid-admin");
+    const ws = await connect(`killswitch-invalid-room-${crypto.randomUUID()}`, admin.accessToken);
+    await waitForMessage(ws);
+
+    ws.send(JSON.stringify({ type: "mc:kill_switch", payload: {} }));
+    const response = await waitForMessage(ws);
+    expect(response).toMatchObject({ type: "error", code: "invalid_message" });
+    ws.close();
+  });
+
+  it("succeeds for an admin who does not hold flow control (not flow-controller-gated)", async () => {
+    const controller = await trackedAdmin("killswitch-controller");
+    const other = await trackedAdmin("killswitch-other");
+    const room = `killswitch-uncontrolled-room-${crypto.randomUUID()}`;
+
+    const controllerWs = await connect(room, controller.accessToken);
+    await waitForMessage(controllerWs);
+    controllerWs.send(JSON.stringify({ type: "mc:claim_control" }));
+    await waitForMessage(controllerWs);
+
+    const otherWs = await connect(room, other.accessToken);
+    await waitForMessage(otherWs);
+    otherWs.send(JSON.stringify({ type: "mc:kill_switch", payload: { on: true } }));
+    const response = await waitForMessage(otherWs);
+    expect(response).toMatchObject({ type: "state", killSwitch: true });
+
+    controllerWs.close();
+    otherWs.close();
+  });
+});
+
+describe("hidden participants and teams are excluded from broadcasts (moderation-kill-switch design.md D4)", () => {
+  it("a hidden participant is excluded from rankings/step_results but still scored and persisted", async () => {
+    const admin = await trackedAdmin("hidden-admin");
+    const visiblePlayer = await trackedPlayer("hidden-visible-player");
+    const hiddenPlayer = await trackedPlayer("hidden-hidden-player");
+    const eventId = await makeDraftEvent();
+    const step = await createStep(eventId, 1, { pointsCorrect: 5, teamAwardPoints: 5 });
+
+    const visibleParticipantId = await addParticipant(eventId, visiblePlayer, "VisiblePlayer");
+    const hiddenParticipantId = await addParticipant(eventId, hiddenPlayer, "HiddenPlayer");
+    const teamId = await createTeam(eventId, "Hidden Test Team", [visibleParticipantId, hiddenParticipantId]);
+    await adminClient().from("team").update({ hidden: true }).eq("id", teamId);
+    await adminClient().from("participant").update({ hidden: true }).eq("id", hiddenParticipantId);
+
+    const controllerWs = await connectAndClaimControl(eventId, admin);
+    controllerWs.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(controllerWs);
+    await submitAnswer(eventId, visiblePlayer, step.id, "a");
+    await submitAnswer(eventId, hiddenPlayer, step.id, "a");
+    controllerWs.send(JSON.stringify({ type: "mc:lock" }));
+    await waitForMessage(controllerWs);
+
+    const messages = queueMessages(controllerWs);
+    controllerWs.send(JSON.stringify({ type: "mc:reveal" }));
+    await messages.next(); // state
+    const stepResults = await messages.next();
+    const rankings = await messages.next();
+
+    expect(stepResults.type).toBe("step_results");
+    expect((stepResults.participants as { participantId: string }[]).map((p) => p.participantId)).toEqual([
+      visibleParticipantId,
+    ]);
+
+    expect(rankings.type).toBe("rankings");
+    expect((rankings.individuals as { participantId: string }[]).map((p) => p.participantId)).toEqual([
+      visibleParticipantId,
+    ]);
+    expect((rankings.teams as { teamId: string }[]).map((t) => t.teamId)).toEqual([]);
+
+    // The hidden entities' answers/scores are still fully persisted — the
+    // broadcast is filtered, the record is not (design.md D4).
+    const admin_ = adminClient();
+    const { data: answerRows } = await admin_.from("answer").select("participant_id").eq("step_id", step.id);
+    expect((answerRows ?? []).map((r) => r.participant_id).sort()).toEqual(
+      [visibleParticipantId, hiddenParticipantId].sort(),
+    );
+    const { data: participantResultRows } = await admin_
+      .from("step_result_participant")
+      .select("participant_id, points")
+      .eq("step_id", step.id);
+    expect((participantResultRows ?? []).map((r) => r.participant_id).sort()).toEqual(
+      [visibleParticipantId, hiddenParticipantId].sort(),
+    );
+    // Both participants answered correctly and share the hidden team — its
+    // total still counts the hidden participant's points even though the
+    // team itself is hidden from the broadcast.
+    const { data: teamResultRows } = await admin_
+      .from("step_result_team")
+      .select("awarded_points")
+      .eq("step_id", step.id)
+      .eq("team_id", teamId)
+      .single();
+    expect(teamResultRows?.awarded_points).toBe(5);
+
+    controllerWs.close();
+  });
 });
 
 describe("mc:reveal", () => {

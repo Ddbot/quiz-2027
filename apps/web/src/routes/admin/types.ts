@@ -35,3 +35,17 @@ export interface AdminMcq {
   options: McqOption[];
   correct_option_id: string;
 }
+
+/** Shape of `public.participant` rows, as the moderation roster needs them (moderation-kill-switch). */
+export interface AdminParticipant {
+  id: string;
+  display_name: string;
+  hidden: boolean;
+}
+
+/** Shape of `public.team` rows, as the moderation roster needs them. */
+export interface AdminTeam {
+  id: string;
+  name: string;
+  hidden: boolean;
+}

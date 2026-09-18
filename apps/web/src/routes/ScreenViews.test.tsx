@@ -36,6 +36,7 @@ function renderView(display: RoomDisplay, overrides: Partial<Parameters<typeof B
       rankings={null}
       mediaUrl={null}
       countdownTarget={null}
+      killSwitch={false}
       {...overrides}
     />,
   );
@@ -58,6 +59,23 @@ describe("BigScreenView — 7 required views (FR-062)", () => {
       expect(screen.getByTestId(testId)).toBeInTheDocument();
       unmount();
     }
+  });
+});
+
+describe("Kill switch overlay (moderation-kill-switch design.md D3)", () => {
+  it("blanks the screen regardless of the current display value", () => {
+    for (const display of ["waiting", "question", "leaderboard", "podium"] as RoomDisplay[]) {
+      const { unmount } = renderView(display, { question, stepResults, rankings, killSwitch: true });
+      expect(screen.getByTestId("screen-killswitch-overlay")).toBeInTheDocument();
+      expect(screen.queryByTestId(`screen-${display}-view`)).not.toBeInTheDocument();
+      unmount();
+    }
+  });
+
+  it("resumes the current display view once cleared", () => {
+    renderView("leaderboard", { rankings, killSwitch: false });
+    expect(screen.getByTestId("screen-leaderboard-view")).toBeInTheDocument();
+    expect(screen.queryByTestId("screen-killswitch-overlay")).not.toBeInTheDocument();
   });
 });
 

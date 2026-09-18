@@ -1,5 +1,7 @@
 import { useState, type FormEvent } from "react";
 
+import { isProfane } from "@quiz/shared";
+
 import { getPlayerCopy, type PlayerCopy } from "@/routes/player/copy";
 import { IdentityStep, type PendingJoin } from "@/routes/player/IdentityStep";
 import { LiveGameView } from "@/routes/player/LiveGameView";
@@ -20,7 +22,22 @@ type FlowStep =
 export function OnboardingFlow({ event }: { event: EventSummary }) {
   const copy = getPlayerCopy(event.language);
   const [step, setStep] = useState<FlowStep>({ name: "identity" });
+  const [clientFlaggedProfanity, setClientFlaggedProfanity] = useState(false);
   const { status, errorKind, participant, join } = useJoinEvent(event.join_code);
+
+  // Instant client-side profanity check (moderation-kill-switch design.md
+  // D1) — a UX improvement layered in front of the unchanged, authoritative
+  // server check: a flagged name never reaches `join_event` at all, so a
+  // name that bypasses this (or wasn't caught, e.g. an outdated bundle)
+  // still hits the same server rejection `useJoinEvent` already handles.
+  function attemptJoin(pending: PendingJoin) {
+    if (isProfane(pending.displayName)) {
+      setClientFlaggedProfanity(true);
+      return;
+    }
+    setClientFlaggedProfanity(false);
+    void join(pending);
+  }
 
   if (step.name === "check-email") {
     return (
@@ -36,6 +53,20 @@ export function OnboardingFlow({ event }: { event: EventSummary }) {
       return <JoinedView copy={copy} event={event} participant={participant} />;
     }
 
+    // The client-side check flags a match before any round trip; a
+    // server-side rejection (errorKind === "profanity" below) is the same
+    // retry UI, reached only if a name got past this check.
+    if (clientFlaggedProfanity) {
+      return (
+        <ProfanityRetry
+          copy={copy}
+          initialName={step.pending.displayName}
+          submitting={false}
+          onRetry={(displayName) => attemptJoin({ ...step.pending, displayName })}
+        />
+      );
+    }
+
     if (status === "error") {
       // Profanity is the one error the player can fix without redoing
       // identity/consent (already-established) — just let them retype the
@@ -47,7 +78,7 @@ export function OnboardingFlow({ event }: { event: EventSummary }) {
             copy={copy}
             initialName={step.pending.displayName}
             submitting={false}
-            onRetry={(displayName) => void join({ ...step.pending, displayName })}
+            onRetry={(displayName) => attemptJoin({ ...step.pending, displayName })}
           />
         );
       }
@@ -73,7 +104,7 @@ export function OnboardingFlow({ event }: { event: EventSummary }) {
         copy={copy}
         displayName={step.pending.displayName}
         submitting={status === "joining"}
-        onConfirm={() => void join(step.pending)}
+        onConfirm={() => attemptJoin(step.pending)}
         onBack={() => setStep({ name: "identity" })}
       />
     );
@@ -107,6 +138,13 @@ function JoinedView({ copy, event, participant }: JoinedViewProps) {
   const { session } = useAuth();
   const { state, answerAck, ownResult, sendCommand, isExpired } = useEventRoom(event.id, session?.access_token);
   const effectiveStatus = state?.eventStatus ?? event.status;
+
+  // Kill switch takes priority over every other view (moderation-kill-switch
+  // design.md D3) — checked ahead of the draft/live/ended branching below,
+  // mirroring the big screen's own early-return guard. `state.eventStatus`/
+  // `step` are never touched by `mc:kill_switch`, so clearing it just
+  // resumes this same branching, no separate "restore" logic needed.
+  if (state?.killSwitch) return <KillSwitchOverlay />;
 
   return (
     <div className="flex w-full flex-col gap-4">
@@ -146,6 +184,15 @@ function EventEndedView({ copy }: { copy: PlayerCopy }) {
       <p className="text-muted-foreground text-sm">{copy.eventEndedBody}</p>
     </div>
   );
+}
+
+/**
+ * The kill switch's blanking overlay (moderation-kill-switch) — visually
+ * identical intent to the big screen's own overlay (`ScreenViews.tsx`'s
+ * `KillSwitchOverlay`), a true blank, no copy needed.
+ */
+function KillSwitchOverlay() {
+  return <div data-testid="killswitch-overlay" className="h-full w-full" />;
 }
 
 interface ProfanityRetryProps {

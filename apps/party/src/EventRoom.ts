@@ -53,6 +53,8 @@ interface RosterParticipant {
   id: string;
   team_id: string | null;
   display_name: string;
+  /** Excluded from broadcast rankings/results when true (moderation-kill-switch design.md D4) — never from scoring. */
+  hidden: boolean;
 }
 
 /** Raw shape of a `local_answer` row this DO reads from its own SQLite. */
@@ -88,6 +90,14 @@ function isOperatorDisplayPayload(payload: unknown): payload is { view: RoomDisp
   if (typeof payload !== "object" || payload === null) return false;
   const view = (payload as Record<string, unknown>).view;
   return typeof view === "string" && (VALID_DISPLAY_VIEWS as readonly string[]).includes(view);
+}
+
+function isMcKillSwitchPayload(payload: unknown): payload is { on: boolean } {
+  return (
+    typeof payload === "object" &&
+    payload !== null &&
+    typeof (payload as Record<string, unknown>).on === "boolean"
+  );
 }
 
 /**
@@ -347,6 +357,9 @@ export class EventRoom extends Server<Env> {
       case "mc:end":
         void this.handleMcEnd(connection);
         return;
+      case "mc:kill_switch":
+        this.handleMcKillSwitch(connection, command.payload);
+        return;
       default:
         this.sendError(connection, "unknown_command", `Unknown command: ${command.type}`);
     }
@@ -395,6 +408,35 @@ export class EventRoom extends Server<Env> {
 
     const { state: nextState, changed } = applyMutation(this.#state, (current) =>
       current.display === payload.view ? current : { ...current, display: payload.view },
+    );
+    this.#state = nextState;
+
+    if (changed) {
+      this.persistState();
+      this.broadcastState();
+    }
+  }
+
+  /**
+   * `mc:kill_switch` (moderation-kill-switch design.md D3) — any admin, not
+   * flow-controller-gated (same shape as `handleClaimControl`/
+   * `handleOperatorDisplay`). Only ever flips `killSwitch`, never `display`/
+   * `step`, so clearing it needs no separate "restore" logic — whatever was
+   * showing underneath was never touched.
+   */
+  private handleMcKillSwitch(connection: Connection<ConnState>, payload: unknown): void {
+    const state = connection.state;
+    if (!state || state.role !== "admin") {
+      this.sendError(connection, "forbidden", "Only an admin may use the kill switch");
+      return;
+    }
+    if (!isMcKillSwitchPayload(payload)) {
+      this.sendError(connection, "invalid_message", "mc:kill_switch requires an `on` boolean");
+      return;
+    }
+
+    const { state: nextState, changed } = applyMutation(this.#state, (current) =>
+      current.killSwitch === payload.on ? current : { ...current, killSwitch: payload.on },
     );
     this.#state = nextState;
 
@@ -559,6 +601,15 @@ export class EventRoom extends Server<Env> {
     }
     const { stepId, optionId } = payload;
 
+    // Defensive: the submitting player's own view is already blanked while
+    // the kill switch is active, so this is mostly unreachable through the
+    // normal UI — but a request already in flight shouldn't be silently
+    // scored (moderation-kill-switch design.md D3).
+    if (this.#state.killSwitch) {
+      this.sendError(connection, "kill_switch_active", "Answers are not accepted while the kill switch is active");
+      return;
+    }
+
     const step = this.#state.step;
     if (this.#state.eventStatus !== "live" || !step || step.id !== stepId || step.status !== "active") {
       this.sendError(connection, "not_active", "This step is not currently accepting answers");
@@ -616,7 +667,7 @@ export class EventRoom extends Server<Env> {
     const supabase = this.getSupabase();
     const { data, error } = await supabase
       .from("participant")
-      .select("id, team_id, display_name")
+      .select("id, team_id, display_name, hidden")
       .eq("event_id", this.name);
     if (error || !data) return [];
     return data as RosterParticipant[];
@@ -663,31 +714,44 @@ export class EventRoom extends Server<Env> {
 
     const { data: teamRows } = await supabase
       .from("team")
-      .select("id, name")
+      .select("id, name, hidden")
       .eq("event_id", this.name)
       .eq("dissolved", false);
 
+    // Ranks are assigned over the FULL roster/team set — including hidden
+    // entries — before hidden ones are dropped from the returned arrays
+    // below, so a hidden #1 leaves a gap rather than being backfilled
+    // (moderation-kill-switch design.md D4). The scoring inputs above
+    // (`individualTotals`/`teamTotals`) are likewise built from every
+    // participant/team regardless of `hidden` — only this broadcast/cached
+    // *output* is filtered.
     const individualRanked = rankByTotal(roster.map((p) => ({ id: p.id, total: individualTotals.get(p.id) ?? 0 })));
     const teamRanked = rankByTotal(
       (teamRows ?? []).map((t) => ({ id: t.id as string, total: teamTotals.get(t.id as string) ?? 0 })),
     );
     const displayNameById = new Map(roster.map((p) => [p.id, p.display_name]));
+    const hiddenByParticipant = new Map(roster.map((p) => [p.id, p.hidden]));
     const teamNameById = new Map((teamRows ?? []).map((t) => [t.id as string, t.name as string]));
+    const hiddenByTeam = new Map((teamRows ?? []).map((t) => [t.id as string, t.hidden as boolean]));
 
     return {
       type: "rankings",
-      individuals: individualRanked.map((r) => ({
-        participantId: r.id,
-        displayName: displayNameById.get(r.id) ?? "",
-        total: r.total,
-        rank: r.rank,
-      })),
-      teams: teamRanked.map((r) => ({
-        teamId: r.id,
-        name: teamNameById.get(r.id) ?? "",
-        total: r.total,
-        rank: r.rank,
-      })),
+      individuals: individualRanked
+        .filter((r) => !hiddenByParticipant.get(r.id))
+        .map((r) => ({
+          participantId: r.id,
+          displayName: displayNameById.get(r.id) ?? "",
+          total: r.total,
+          rank: r.rank,
+        })),
+      teams: teamRanked
+        .filter((r) => !hiddenByTeam.get(r.id))
+        .map((r) => ({
+          teamId: r.id,
+          name: teamNameById.get(r.id) ?? "",
+          total: r.total,
+          rank: r.rank,
+        })),
     };
   }
 
@@ -788,10 +852,15 @@ export class EventRoom extends Server<Env> {
       return;
     }
 
+    // The broadcast/cached message excludes hidden participants (design.md
+    // D4); `resultByParticipant` below (used for each player's own
+    // `own_result`) stays built from the unfiltered `scoringResult` — a
+    // hidden player still sees their own result.
+    const hiddenByParticipant = new Map(roster.map((p) => [p.id, p.hidden]));
     const stepResults: StepResultsMessage = {
       type: "step_results",
       stepId: step.id,
-      participants: scoringResult.participants,
+      participants: scoringResult.participants.filter((r) => !hiddenByParticipant.get(r.participantId)),
       teams: scoringResult.teams,
     };
     const rankings = await this.computeRankings(roster);

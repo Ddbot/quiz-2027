@@ -79,6 +79,7 @@ export function ScreenRoute() {
         rankings={rankings}
         mediaUrl={event?.waiting_media_path ?? null}
         countdownTarget={event?.waiting_countdown_target ?? null}
+        killSwitch={state?.killSwitch ?? false}
       />
     </main>
   );
