@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 
+import { isProfane } from "@quiz/shared";
+
 import { supabase } from "@/lib/supabase";
 import { mapTeamLobbyError, type TeamLobbyErrorKind } from "@/routes/player/teamLobbyErrors";
 import type { Team } from "@/routes/player/types";
@@ -40,6 +42,13 @@ export function useTeamLobby(eventId: string, participantId: string) {
 
   async function createTeam(name: string): Promise<boolean> {
     setActionError(null);
+    // Instant client-side check (moderation-kill-switch design.md D1) — a
+    // UX improvement in front of the unchanged, authoritative server check;
+    // a name that bypasses this still hits `create_team`'s own rejection.
+    if (isProfane(name)) {
+      setActionError("profanity");
+      return false;
+    }
     const { error } = await supabase.rpc("create_team", { p_event_id: eventId, p_name: name });
     if (error) {
       setActionError(mapTeamLobbyError(error.message));
@@ -73,6 +82,10 @@ export function useTeamLobby(eventId: string, participantId: string) {
 
   async function renameTeam(teamId: string, name: string): Promise<boolean> {
     setActionError(null);
+    if (isProfane(name)) {
+      setActionError("profanity");
+      return false;
+    }
     const { error } = await supabase.rpc("rename_team", { p_team_id: teamId, p_name: name });
     if (error) {
       setActionError(mapTeamLobbyError(error.message));

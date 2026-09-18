@@ -82,6 +82,14 @@ export interface RoomState {
   lastStepResults: RoomStepResults | null;
   /** The most recent cumulative rankings; kept across step transitions — never stale, only superseded. */
   lastRankings: RoomRankings | null;
+  /**
+   * Whether the admin kill switch is currently active (moderation-kill-switch
+   * design.md D3). Independent of `display`/`step` — never read or mutated by
+   * anything except `mc:kill_switch` itself — so a client can render it as a
+   * blanking overlay on top of whatever `display`/`step` would otherwise show,
+   * and clearing it needs no separate "restore" logic.
+   */
+  killSwitch: boolean;
 }
 
 /** The state a freshly constructed EventRoom starts with (no prior persisted state). */
@@ -94,6 +102,7 @@ export function defaultRoomState(): RoomState {
     controllerId: null,
     lastStepResults: null,
     lastRankings: null,
+    killSwitch: false,
   };
 }
 

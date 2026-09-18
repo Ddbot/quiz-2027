@@ -4,6 +4,7 @@ import type { RoomDisplay } from "@quiz/shared";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { adminCopy, type AdminCopy } from "@/routes/admin/copy";
+import { ModerationSection } from "@/routes/admin/ModerationSection";
 import { useEventRoom } from "@/routes/player/useEventRoom";
 
 const DISPLAY_VIEWS: { view: RoomDisplay; label: keyof AdminCopy }[] = [
@@ -59,6 +60,8 @@ export function LiveControlPage() {
           {lastError.message}
         </p>
       )}
+
+      {state?.killSwitch && <p role="alert">{adminCopy.killSwitchActiveNotice}</p>}
 
       <section className="flex flex-col gap-1 text-sm">
         <p>
@@ -127,6 +130,13 @@ export function LiveControlPage() {
         >
           {adminCopy.endEventButton}
         </Button>
+        <Button
+          type="button"
+          variant="destructive"
+          onClick={() => sendCommand("mc:kill_switch", { on: !state?.killSwitch })}
+        >
+          {state?.killSwitch ? adminCopy.killSwitchClearButton : adminCopy.killSwitchButton}
+        </Button>
       </div>
 
       <section className="flex flex-col gap-2">
@@ -153,6 +163,8 @@ export function LiveControlPage() {
       >
         {adminCopy.castButton}
       </Button>
+
+      <ModerationSection eventId={eventId} />
     </div>
   );
 }
