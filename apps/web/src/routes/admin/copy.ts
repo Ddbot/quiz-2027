@@ -71,6 +71,33 @@ export const adminCopy = {
   countdownSecondsLabel: "Durée du compte à rebours (secondes)",
   pointsCorrectLabel: "Points pour une bonne réponse",
   teamAwardPointsLabel: "Points bonus pour l'équipe gagnante",
+
+  liveControlLink: "Contrôle en direct",
+  liveControlTitle: "Contrôle en direct",
+  liveControlBack: "Retour à l'événement",
+  claimControlButton: "Prendre le contrôle",
+  controlHeldByYou: "Vous détenez le contrôle du direct.",
+  controlHeldByOther: "Le contrôle est détenu par un autre administrateur.",
+  controlHeldByNone: "Personne ne détient le contrôle pour le moment.",
+  startEventButton: "Démarrer l'événement",
+  advanceButton: "Étape suivante",
+  lockButton: "Verrouiller les réponses",
+  revealButton: "Révéler les résultats",
+  statusLabel: "Statut de l'événement",
+  currentStepLabel: "Étape en cours",
+  noCurrentStep: "Aucune étape en cours.",
+
+  displaySectionTitle: "Écran",
+  displayWaiting: "Attente",
+  displayQuestion: "Question",
+  displayCollecting: "Collecte des réponses",
+  displayResults: "Résultats",
+  displayLeaderboard: "Classement",
+  displayPodium: "Podium",
+  displayBlank: "Écran noir",
+
+  castButton: "Caster vers un écran",
+  castFallbackNotice: "L'API de présentation n'est pas disponible ; une nouvelle fenêtre s'ouvre à la place.",
 } as const;
 
 export type AdminCopy = typeof adminCopy;

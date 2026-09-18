@@ -66,8 +66,9 @@ describe("route shells", () => {
     expect(screen.getByRole("heading", { name: /administration/i })).toBeInTheDocument();
   });
 
-  it("screen route reads the event id from the URL", () => {
+  it("screen route requires an admin session (design.md D1, big-screen-presentation) — a signed-out visitor sees no event content", async () => {
     renderAt("/screen/evt_123");
-    expect(screen.getByTestId("event-id")).toHaveTextContent("evt_123");
+    expect(await screen.findByRole("alert")).toBeInTheDocument();
+    expect(screen.queryByTestId("screen-route")).not.toBeInTheDocument();
   });
 });

@@ -185,9 +185,10 @@ async function signBadToken(sub: string): Promise<string> {
     .sign(privateKey);
 }
 
-async function connect(room: string, token?: string): Promise<WebSocket> {
+async function connect(room: string, token?: string, options: { screen?: boolean } = {}): Promise<WebSocket> {
   const url = new URL(`https://example.com/parties/event-room/${room}`);
   if (token) url.searchParams.set("token", token);
+  if (options.screen) url.searchParams.set("screen", "1");
   const res = await SELF.fetch(url, { headers: { Upgrade: "websocket" } });
   const ws = res.webSocket;
   if (!ws) throw new Error(`expected a WebSocket, got HTTP ${res.status}`);
@@ -228,6 +229,32 @@ async function waitForMessageOfType(ws: WebSocket, type: string): Promise<Record
     const message = await waitForMessage(ws);
     if (message.type === type) return message;
   }
+}
+
+/**
+ * A queue-backed reader, unlike `waitForMessage`'s per-call `{once: true}`
+ * listener: attaches one persistent listener up front and buffers every
+ * message from then on, so a tight burst of several synchronous broadcasts
+ * (e.g. `mc:reveal`'s state/step_results/rankings, sent back-to-back after
+ * real async I/O with no yield in between) can never race ahead of a
+ * `waitForMessage`-style re-subscription between messages.
+ */
+function queueMessages(ws: WebSocket): { next(): Promise<Record<string, unknown>> } {
+  const pending: Record<string, unknown>[] = [];
+  const waiters: ((message: Record<string, unknown>) => void)[] = [];
+  ws.addEventListener("message", (e) => {
+    const message = JSON.parse(String(e.data)) as Record<string, unknown>;
+    const waiter = waiters.shift();
+    if (waiter) waiter(message);
+    else pending.push(message);
+  });
+  return {
+    next(): Promise<Record<string, unknown>> {
+      const buffered = pending.shift();
+      if (buffered) return Promise.resolve(buffered);
+      return new Promise((resolve) => waiters.push(resolve));
+    },
+  };
 }
 
 /** Connects as `admin`, waits for the initial snapshot, then claims control. */
@@ -1175,6 +1202,286 @@ describe("mc:reveal", () => {
       observerWs.close();
     },
     15000,
+  );
+});
+
+describe("screen role", () => {
+  it("an admin connection presenting the screen flag resolves as screen, not admin", async () => {
+    const admin = await trackedAdmin("screen-role-admin");
+    const ws = await connect(`screen-role-room-${crypto.randomUUID()}`, admin.accessToken, { screen: true });
+    await waitForMessage(ws); // initial snapshot
+
+    // A screen connection cannot claim control — proves the role landed as
+    // "screen", not "admin" (design.md D1).
+    ws.send(JSON.stringify({ type: "mc:claim_control" }));
+    const response = await waitForMessage(ws);
+    expect(response).toMatchObject({ type: "error", code: "forbidden" });
+    ws.close();
+  });
+
+  it("the same admin without the screen flag still resolves as admin", async () => {
+    const admin = await trackedAdmin("screen-role-plain-admin");
+    const ws = await connect(`screen-role-plain-room-${crypto.randomUUID()}`, admin.accessToken);
+    await waitForMessage(ws);
+
+    ws.send(JSON.stringify({ type: "mc:claim_control" }));
+    const response = await waitForMessage(ws);
+    expect(response).toMatchObject({ type: "state", controllerId: admin.profileId });
+    ws.close();
+  });
+
+  it("a non-admin presenting the screen flag still resolves as an ordinary player", async () => {
+    const player = await trackedPlayer("screen-role-player");
+    const eventId = await createEventWithParticipant(player);
+    const ws = await connect(eventId, player.accessToken, { screen: true });
+    await waitForMessage(ws);
+
+    // Still rejected from admin-only actions, exactly as a normal player
+    // would be — the flag never elevates a non-admin connection.
+    ws.send(JSON.stringify({ type: "mc:claim_control" }));
+    const response = await waitForMessage(ws);
+    expect(response).toMatchObject({ type: "error", code: "forbidden" });
+    ws.close();
+  });
+
+  it("a screen connection cannot invoke operator:display", async () => {
+    const admin = await trackedAdmin("screen-role-display-admin");
+    const ws = await connect(`screen-role-display-room-${crypto.randomUUID()}`, admin.accessToken, {
+      screen: true,
+    });
+    await waitForMessage(ws);
+
+    ws.send(JSON.stringify({ type: "operator:display", payload: { view: "leaderboard" } }));
+    const response = await waitForMessage(ws);
+    expect(response).toMatchObject({ type: "error", code: "forbidden" });
+    ws.close();
+  });
+
+  it("a screen connection receives the public broadcasts but never own_result", async () => {
+    const admin = await trackedAdmin("screen-role-broadcast-admin");
+    const player = await trackedPlayer("screen-role-broadcast-player");
+    const eventId = await makeDraftEvent();
+    const step = await createStep(eventId, 1);
+    await addParticipant(eventId, player, "ScreenTestPlayer");
+
+    const controllerWs = await connectAndClaimControl(eventId, admin);
+    const screenWs = await connect(eventId, admin.accessToken, { screen: true });
+    await waitForMessage(screenWs); // initial snapshot
+
+    controllerWs.send(JSON.stringify({ type: "mc:start" }));
+    await Promise.all([waitForMessage(controllerWs), waitForMessage(screenWs)]);
+
+    await submitAnswer(eventId, player, step.id, "a");
+
+    controllerWs.send(JSON.stringify({ type: "mc:lock" }));
+    await Promise.all([waitForMessage(controllerWs), waitForMessage(screenWs)]);
+
+    controllerWs.send(JSON.stringify({ type: "mc:reveal" }));
+    const screenStepResults = await waitForMessageOfType(screenWs, "step_results");
+    expect(screenStepResults.participants).toBeDefined();
+    const screenRankings = await waitForMessageOfType(screenWs, "rankings");
+    expect(screenRankings.individuals).toBeDefined();
+
+    // The screen never receives an own_result — that stays player-private.
+    const nothingElse = await waitForMessageOrTimeout(screenWs, 300);
+    expect(nothingElse).toBe("timeout");
+
+    controllerWs.close();
+    screenWs.close();
+  });
+});
+
+describe("operator:display", () => {
+  it("an admin sets the display directive", async () => {
+    const admin = await trackedAdmin("display-admin");
+    const ws = await connect(`display-room-${crypto.randomUUID()}`, admin.accessToken);
+    await waitForMessage(ws);
+
+    ws.send(JSON.stringify({ type: "operator:display", payload: { view: "leaderboard" } }));
+    const update = await waitForMessage(ws);
+    expect(update).toMatchObject({ type: "state", display: "leaderboard" });
+    ws.close();
+  });
+
+  it("rejects a non-admin", async () => {
+    const player = await trackedPlayer("display-player");
+    const eventId = await createEventWithParticipant(player);
+    const ws = await connect(eventId, player.accessToken);
+    await waitForMessage(ws);
+
+    ws.send(JSON.stringify({ type: "operator:display", payload: { view: "waiting" } }));
+    const response = await waitForMessage(ws);
+    expect(response).toMatchObject({ type: "error", code: "forbidden" });
+    ws.close();
+  });
+
+  it("succeeds for an admin who does not currently hold flow control (not flow-controller-gated)", async () => {
+    const controller = await trackedAdmin("display-controller");
+    const other = await trackedAdmin("display-other");
+    const room = `display-uncontrolled-room-${crypto.randomUUID()}`;
+
+    const controllerWs = await connect(room, controller.accessToken);
+    await waitForMessage(controllerWs);
+    controllerWs.send(JSON.stringify({ type: "mc:claim_control" }));
+    await waitForMessage(controllerWs);
+
+    const otherWs = await connect(room, other.accessToken);
+    await waitForMessage(otherWs);
+    otherWs.send(JSON.stringify({ type: "operator:display", payload: { view: "podium" } }));
+    const response = await waitForMessage(otherWs);
+    expect(response).toMatchObject({ type: "state", display: "podium" });
+
+    controllerWs.close();
+    otherWs.close();
+  });
+
+  it("rejects an invalid view value, leaving the display unchanged", async () => {
+    const admin = await trackedAdmin("display-invalid-admin");
+    const ws = await connect(`display-invalid-room-${crypto.randomUUID()}`, admin.accessToken);
+    await waitForMessage(ws);
+
+    ws.send(JSON.stringify({ type: "operator:display", payload: { view: "not-a-real-view" } }));
+    const response = await waitForMessage(ws);
+    expect(response).toMatchObject({ type: "error", code: "invalid_message" });
+    ws.close();
+  });
+});
+
+describe("reconnect shows current state, not a replay (FR-063)", () => {
+  it("a newly connecting client receives the current step's results and rankings without sending anything", async () => {
+    const admin = await trackedAdmin("reconnect-results-admin");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1);
+
+    const controllerWs = await connectAndClaimControl(eventId, admin);
+    controllerWs.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(controllerWs);
+    controllerWs.send(JSON.stringify({ type: "mc:lock" }));
+    await waitForMessage(controllerWs);
+    controllerWs.send(JSON.stringify({ type: "mc:reveal" }));
+    await waitForMessage(controllerWs); // state
+    await waitForMessage(controllerWs); // step_results
+    await waitForMessage(controllerWs); // rankings
+
+    const lateWs = await connect(eventId, admin.accessToken);
+    const snapshot = await waitForMessage(lateWs);
+    expect(snapshot).toMatchObject({ type: "state", step: { status: "revealed" } });
+    const cachedResults = await waitForMessage(lateWs);
+    expect(cachedResults.type).toBe("step_results");
+    const cachedRankings = await waitForMessage(lateWs);
+    expect(cachedRankings.type).toBe("rankings");
+
+    controllerWs.close();
+    lateWs.close();
+  });
+
+  it("a newly connecting client does not see a previous step's results after advancing, but still sees current rankings", async () => {
+    const admin = await trackedAdmin("reconnect-advance-admin");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1);
+    await createStep(eventId, 2);
+
+    const controllerWs = await connectAndClaimControl(eventId, admin);
+    controllerWs.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(controllerWs);
+    controllerWs.send(JSON.stringify({ type: "mc:lock" }));
+    await waitForMessage(controllerWs);
+    controllerWs.send(JSON.stringify({ type: "mc:reveal" }));
+    await waitForMessage(controllerWs); // state
+    await waitForMessage(controllerWs); // step_results
+    await waitForMessage(controllerWs); // rankings
+
+    controllerWs.send(JSON.stringify({ type: "mc:advance" }));
+    await waitForMessage(controllerWs);
+
+    const lateWs = await connect(eventId, admin.accessToken);
+    const snapshot = await waitForMessage(lateWs);
+    expect(snapshot).toMatchObject({ type: "state", step: { position: 2, status: "active" } });
+    const onlyOtherMessage = await waitForMessage(lateWs);
+    expect(onlyOtherMessage.type).toBe("rankings"); // not step_results — the prior step's results are cleared
+    const nothingElse = await waitForMessageOrTimeout(lateWs, 300);
+    expect(nothingElse).toBe("timeout");
+
+    controllerWs.close();
+    lateWs.close();
+  });
+});
+
+describe("full live scenario with a screen connection (task 3.2)", () => {
+  it(
+    "mc:start -> answer:submit -> mc:lock -> mc:reveal -> operator:display leaves the screen with everything it needs for each of the 7 views",
+    async () => {
+      const admin = await trackedAdmin("full-scenario-admin");
+      const player = await trackedPlayer("full-scenario-player");
+      const eventId = await makeDraftEvent();
+      const step = await createStep(eventId, 1, { pointsCorrect: 2 });
+      await addParticipant(eventId, player, "FullScenarioPlayer");
+
+      const controllerWs = await connectAndClaimControl(eventId, admin);
+      const screenWs = await connect(eventId, admin.accessToken, { screen: true });
+      // Queue-backed readers (not the shared waitForMessage helper) — this
+      // test triggers a tight burst of 3 synchronous broadcasts on
+      // mc:reveal (state/step_results/rankings, sent back-to-back after real
+      // async I/O with no yield in between), which a fresh-listener-per-call
+      // reader can race and lose messages from; a persistent queued listener
+      // cannot.
+      const controllerQueue = queueMessages(controllerWs);
+      const screenQueue = queueMessages(screenWs);
+      await screenQueue.next(); // initial snapshot
+
+      // Waiting view: display already defaults to "waiting" (defaultRoomState) —
+      // nothing to send or wait for here. (Re-sent later, once display has
+      // actually moved elsewhere, to exercise a real transition to it too.)
+
+      // Question view: the screen already has `question` from `state` once
+      // the step is active — no further request needed to render it.
+      controllerWs.send(JSON.stringify({ type: "mc:start" }));
+      const [, screenAfterStart] = await Promise.all([controllerQueue.next(), screenQueue.next()]);
+      expect(screenAfterStart.question).toMatchObject({ text: "Question for step 1" });
+      controllerWs.send(JSON.stringify({ type: "operator:display", payload: { view: "question" } }));
+      await Promise.all([controllerQueue.next(), screenQueue.next()]);
+
+      // Collecting view: same underlying state, different directive.
+      controllerWs.send(JSON.stringify({ type: "operator:display", payload: { view: "collecting" } }));
+      await Promise.all([controllerQueue.next(), screenQueue.next()]);
+
+      await submitAnswer(eventId, player, step.id, "a");
+      controllerWs.send(JSON.stringify({ type: "mc:lock" }));
+      await Promise.all([controllerQueue.next(), screenQueue.next()]);
+
+      // Results view: the screen must already hold step_results by the time
+      // it's directed to show them.
+      controllerWs.send(JSON.stringify({ type: "mc:reveal" }));
+      await controllerQueue.next(); // state
+      await controllerQueue.next(); // step_results
+      await controllerQueue.next(); // rankings
+      await screenQueue.next(); // state
+      const screenStepResults = await screenQueue.next(); // step_results
+      expect(screenStepResults.participants).toEqual(
+        expect.arrayContaining([expect.objectContaining({ isCorrect: true, points: 2 })]),
+      );
+      await screenQueue.next(); // rankings
+      controllerWs.send(JSON.stringify({ type: "operator:display", payload: { view: "results" } }));
+      await Promise.all([controllerQueue.next(), screenQueue.next()]);
+
+      // Leaderboard view: same rankings data the screen already received.
+      controllerWs.send(JSON.stringify({ type: "operator:display", payload: { view: "leaderboard" } }));
+      await Promise.all([controllerQueue.next(), screenQueue.next()]);
+
+      // Podium, waiting (genuinely re-selected now that display has moved
+      // elsewhere), and blank views: no further data needed beyond the directive.
+      controllerWs.send(JSON.stringify({ type: "operator:display", payload: { view: "podium" } }));
+      await Promise.all([controllerQueue.next(), screenQueue.next()]);
+      controllerWs.send(JSON.stringify({ type: "operator:display", payload: { view: "waiting" } }));
+      await Promise.all([controllerQueue.next(), screenQueue.next()]);
+      controllerWs.send(JSON.stringify({ type: "operator:display", payload: { view: "blank" } }));
+      const [, screenFinal] = await Promise.all([controllerQueue.next(), screenQueue.next()]);
+      expect(screenFinal).toMatchObject({ type: "state", display: "blank" });
+
+      controllerWs.close();
+      screenWs.close();
+    },
+    20000,
   );
 });
 

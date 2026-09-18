@@ -46,6 +46,10 @@ export function EventEditorPage() {
 
       {readOnly && <p role="note">{adminCopy.readOnlyNotice}</p>}
 
+      <Link to={`/admin/events/${event.id}/live`} className="text-sm underline">
+        {adminCopy.liveControlLink}
+      </Link>
+
       <EventDetailsForm event={event} readOnly={readOnly} onSaved={state.reload} />
 
       <JoinCodeQr joinCode={event.join_code} />
