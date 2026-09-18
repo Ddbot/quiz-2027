@@ -148,6 +148,57 @@ describe("LiveControlPage — operator:display", () => {
   });
 });
 
+describe("LiveControlPage — mc:show_leaderboard and mc:end", () => {
+  async function makeLiveAndControlled(socket: InstanceType<typeof FakePartySocket>) {
+    dispatchMessage(socket, {
+      type: "state",
+      eventStatus: "live",
+      step: null,
+      question: null,
+      display: "waiting",
+      controllerId: "admin-1",
+      serverNow: new Date().toISOString(),
+    });
+    await waitFor(() => expect(screen.getByRole("button", { name: /afficher le classement/i })).toBeEnabled());
+  }
+
+  it("sends mc:show_leaderboard", async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await waitFor(() => expect(socketInstances).toHaveLength(1));
+    const socket = socketInstances[0]!;
+    await makeLiveAndControlled(socket);
+
+    await user.click(screen.getByRole("button", { name: /afficher le classement/i }));
+    expect(JSON.parse(socket.sent.at(-1)!)).toEqual({ type: "mc:show_leaderboard", payload: undefined });
+  });
+
+  it("does not send mc:end when the confirmation is declined", async () => {
+    vi.stubGlobal("confirm", vi.fn().mockReturnValue(false));
+    const user = userEvent.setup();
+    renderPage();
+    await waitFor(() => expect(socketInstances).toHaveLength(1));
+    const socket = socketInstances[0]!;
+    await makeLiveAndControlled(socket);
+
+    await user.click(screen.getByRole("button", { name: /terminer l'événement/i }));
+    expect(window.confirm).toHaveBeenCalled();
+    expect(socket.sent.some((m) => JSON.parse(m).type === "mc:end")).toBe(false);
+  });
+
+  it("sends mc:end once the confirmation is accepted", async () => {
+    vi.stubGlobal("confirm", vi.fn().mockReturnValue(true));
+    const user = userEvent.setup();
+    renderPage();
+    await waitFor(() => expect(socketInstances).toHaveLength(1));
+    const socket = socketInstances[0]!;
+    await makeLiveAndControlled(socket);
+
+    await user.click(screen.getByRole("button", { name: /terminer l'événement/i }));
+    expect(JSON.parse(socket.sent.at(-1)!)).toEqual({ type: "mc:end", payload: undefined });
+  });
+});
+
 describe("LiveControlPage — Operator caster (design.md D5)", () => {
   it("uses PresentationRequest when available", async () => {
     const start = vi.fn().mockResolvedValue(undefined);

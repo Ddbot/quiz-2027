@@ -15,6 +15,8 @@ export const screenCopy = {
     leaderboardTitle: "Classement",
     podiumTitle: "Podium",
     noRankingsYet: "Aucun classement pour le moment.",
+    individualsLabel: "Individuel",
+    teamsLabel: "Équipes",
     notAdminMessage: "Cette page nécessite une session administrateur (Operator mode).",
   },
   en: {
@@ -30,6 +32,8 @@ export const screenCopy = {
     leaderboardTitle: "Leaderboard",
     podiumTitle: "Podium",
     noRankingsYet: "No rankings yet.",
+    individualsLabel: "Individual",
+    teamsLabel: "Teams",
     notAdminMessage: "This page requires an admin session (Operator mode).",
   },
 } as const;

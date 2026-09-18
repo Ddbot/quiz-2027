@@ -128,6 +128,22 @@ function JoinedView({ copy, event, participant }: JoinedViewProps) {
           sendCommand={sendCommand}
         />
       )}
+      {effectiveStatus === "ended" && <EventEndedView copy={copy} />}
+    </div>
+  );
+}
+
+/**
+ * A still-connected player's terminal state once the event has ended
+ * (live-game capability, reveal-leaderboard-end) — `eventStatus: "ended"`
+ * only became reachable this milestone; without this, a connected player
+ * saw a blank area below the joined header once it happened.
+ */
+function EventEndedView({ copy }: { copy: PlayerCopy }) {
+  return (
+    <div data-testid="event-ended-view" className="flex flex-col items-center gap-2 text-center">
+      <h2 className="text-lg font-semibold">{copy.eventEndedTitle}</h2>
+      <p className="text-muted-foreground text-sm">{copy.eventEndedBody}</p>
     </div>
   );
 }

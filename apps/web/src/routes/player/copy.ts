@@ -78,6 +78,9 @@ export const playerCopy = {
     joinCodeInputLabel: "Code de participation",
     landingJoinButton: "Rejoindre",
     landingAdminLink: "Vous êtes organisateur ou organisatrice ? Se connecter",
+
+    eventEndedTitle: "L'événement est terminé",
+    eventEndedBody: "Merci d'avoir joué !",
   },
   en: {
     heading: "Quiz 2027",
@@ -152,6 +155,9 @@ export const playerCopy = {
     joinCodeInputLabel: "Join code",
     landingJoinButton: "Join",
     landingAdminLink: "Are you the organizer? Sign in",
+
+    eventEndedTitle: "The event has ended",
+    eventEndedBody: "Thanks for playing!",
   },
 } as const;
 
