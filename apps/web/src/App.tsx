@@ -9,10 +9,10 @@ import { ScreenRoute } from "@/routes/ScreenRoute";
 
 /**
  * Top-level route tree. The player route runs the real onboarding flow
- * (MILESTONE-03); big-screen is still a placeholder shell pending its own
- * milestone. `/` is the join-code landing page (FR-001's "manual entry")
- * — it used to redirect straight to `/admin`, a MILESTONE-01 scaffold
- * placeholder nobody had replaced since.
+ * (MILESTONE-03); the big-screen route runs the real `role = screen`
+ * receiver (MILESTONE-09). `/` is the join-code landing page (FR-001's
+ * "manual entry") — it used to redirect straight to `/admin`, a MILESTONE-01
+ * scaffold placeholder nobody had replaced since.
  */
 export function App() {
   return (
