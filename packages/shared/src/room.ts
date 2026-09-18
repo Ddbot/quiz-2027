@@ -1,9 +1,10 @@
 // EventRoom authoritative state — portable per NFR-017 (no Cloudflare/DO
 // import). Used by apps/party's EventRoom and, later, the real game-flow
 // command handlers (scoring, timer, MCQ) built on the same primitives.
+import type { ParticipantStepResult, TeamStepResult } from "./scoring.js";
 
 /** A connection's role, resolved server-side at connect time (event-room capability). */
-export type RoomRole = "player" | "admin";
+export type RoomRole = "player" | "admin" | "screen";
 
 /**
  * Fixed latency grace added to a timed step's countdown before it hard-locks
@@ -47,6 +48,24 @@ export interface RoomQuestion {
 }
 
 /**
+ * A step's scored results — the data half of the `step_results` broadcast
+ * (scoring capability), cached in `RoomState` so a reconnecting client can
+ * receive the current step's results without replaying past ones (design.md
+ * D2, big-screen-presentation, FR-063).
+ */
+export interface RoomStepResults {
+  stepId: string;
+  participants: ParticipantStepResult[];
+  teams: TeamStepResult[];
+}
+
+/** The event's cumulative standings — the data half of the `rankings` broadcast. */
+export interface RoomRankings {
+  individuals: { participantId: string; displayName: string; total: number; rank: number }[];
+  teams: { teamId: string; name: string; total: number; rank: number }[];
+}
+
+/**
  * The EventRoom's authoritative state (FR-030). Matches the `state` message
  * shape in SPEC.md §7.4.2's Server→Client table, minus `serverNow` (computed
  * fresh per send, not stored — see design.md D3/context).
@@ -59,11 +78,23 @@ export interface RoomState {
   display: RoomDisplay;
   /** `profile_id` of the identity currently holding the flow-control lock, or none yet. */
   controllerId: string | null;
+  /** The current step's results once revealed; cleared when a new step becomes active (design.md D2). */
+  lastStepResults: RoomStepResults | null;
+  /** The most recent cumulative rankings; kept across step transitions — never stale, only superseded. */
+  lastRankings: RoomRankings | null;
 }
 
 /** The state a freshly constructed EventRoom starts with (no prior persisted state). */
 export function defaultRoomState(): RoomState {
-  return { eventStatus: "draft", step: null, question: null, display: "waiting", controllerId: null };
+  return {
+    eventStatus: "draft",
+    step: null,
+    question: null,
+    display: "waiting",
+    controllerId: null,
+    lastStepResults: null,
+    lastRankings: null,
+  };
 }
 
 /**

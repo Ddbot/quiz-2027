@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import { applyMutation, defaultRoomState, requireFlowController } from "./room.js";
-import { toStateMessage } from "./protocol.js";
+import { toStateMessage, type OperatorDisplayCommand } from "./protocol.js";
 
 describe("applyMutation", () => {
   it("reports unchanged when mutate returns the same reference", () => {
@@ -34,6 +34,22 @@ describe("requireFlowController", () => {
   it("is false for a different identity", () => {
     const state = { ...defaultRoomState(), controllerId: "admin-1" };
     expect(requireFlowController(state, "admin-2")).toBe(false);
+  });
+});
+
+describe("defaultRoomState", () => {
+  it("starts with no cached results/rankings (design.md D2)", () => {
+    const state = defaultRoomState();
+    expect(state.lastStepResults).toBeNull();
+    expect(state.lastRankings).toBeNull();
+  });
+});
+
+describe("OperatorDisplayCommand", () => {
+  it("round-trips through JSON with its view payload intact", () => {
+    const command: OperatorDisplayCommand = { type: "operator:display", payload: { view: "leaderboard" } };
+    const parsed = JSON.parse(JSON.stringify(command)) as OperatorDisplayCommand;
+    expect(parsed).toEqual({ type: "operator:display", payload: { view: "leaderboard" } });
   });
 });
 

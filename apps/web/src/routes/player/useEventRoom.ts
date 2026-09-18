@@ -21,7 +21,12 @@ export type RoomConnectionStatus = "connecting" | "open" | "closed";
  * answer deadline on its own clock, not only on the server's `locked`
  * broadcast (design.md D8).
  */
-export function useEventRoom(eventId: string, accessToken: string | undefined) {
+export function useEventRoom(
+  eventId: string,
+  accessToken: string | undefined,
+  options: { screen?: boolean } = {},
+) {
+  const { screen = false } = options;
   const [connectionStatus, setConnectionStatus] = useState<RoomConnectionStatus>("connecting");
   const [state, setState] = useState<StateMessage | null>(null);
   const [answerAck, setAnswerAck] = useState<{ stepId: string; optionId: string } | null>(null);
@@ -41,7 +46,7 @@ export function useEventRoom(eventId: string, accessToken: string | undefined) {
       host,
       party: "event-room",
       room: eventId,
-      query: { token: accessToken },
+      query: screen ? { token: accessToken, screen: "1" } : { token: accessToken },
     });
     socketRef.current = socket;
 
@@ -71,7 +76,7 @@ export function useEventRoom(eventId: string, accessToken: string | undefined) {
       socket.close();
       socketRef.current = null;
     };
-  }, [eventId, accessToken]);
+  }, [eventId, accessToken, screen]);
 
   // Ticks the clock so `isExpired` stays live even with no new server
   // message — the client must not wait for a `locked` broadcast to disable

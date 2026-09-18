@@ -15,6 +15,7 @@ import {
   type OwnResultMessage,
   type ParticipantStepResult,
   type RankingsMessage,
+  type RoomDisplay,
   type RoomQuestion,
   type RoomRole,
   type RoomState,
@@ -71,6 +72,22 @@ function isAnswerSubmitPayload(payload: unknown): payload is { stepId: string; o
     typeof (payload as Record<string, unknown>).stepId === "string" &&
     typeof (payload as Record<string, unknown>).optionId === "string"
   );
+}
+
+const VALID_DISPLAY_VIEWS: readonly RoomDisplay[] = [
+  "waiting",
+  "question",
+  "collecting",
+  "results",
+  "leaderboard",
+  "podium",
+  "blank",
+];
+
+function isOperatorDisplayPayload(payload: unknown): payload is { view: RoomDisplay } {
+  if (typeof payload !== "object" || payload === null) return false;
+  const view = (payload as Record<string, unknown>).view;
+  return typeof view === "string" && (VALID_DISPLAY_VIEWS as readonly string[]).includes(view);
 }
 
 /**
@@ -166,8 +183,16 @@ export class EventRoom extends Server<Env> {
    * Resolves `is_admin` and, for a non-admin, the caller's `participant` row
    * for this event (`this.name` is the event id — the room name). Throws if
    * the profile can't be found or a non-admin has no participant here.
+   *
+   * `wantsScreen` (design.md D1, big-screen-presentation) narrows an admin
+   * connection to `role: "screen"` instead of `"admin"` — it only ever
+   * narrows, never elevates: a non-admin presenting the flag still resolves
+   * as an ordinary player (or is rejected, same as before).
    */
-  private async resolveRole(profileId: string): Promise<{ role: RoomRole; participantId: string | null }> {
+  private async resolveRole(
+    profileId: string,
+    wantsScreen: boolean,
+  ): Promise<{ role: RoomRole; participantId: string | null }> {
     const supabase = this.getSupabase();
 
     const { data: profile, error: profileError } = await supabase
@@ -176,7 +201,7 @@ export class EventRoom extends Server<Env> {
       .eq("id", profileId)
       .maybeSingle();
     if (profileError || !profile) throw new Error("profile not found");
-    if (profile.is_admin) return { role: "admin", participantId: null };
+    if (profile.is_admin) return { role: wantsScreen ? "screen" : "admin", participantId: null };
 
     const { data: participant, error: participantError } = await supabase
       .from("participant")
@@ -254,7 +279,8 @@ export class EventRoom extends Server<Env> {
   override async onConnect(connection: Connection<ConnState>, ctx: ConnectionContext): Promise<void> {
     try {
       const profileId = await this.verifyToken(ctx.request);
-      const { role, participantId } = await this.resolveRole(profileId);
+      const wantsScreen = new URL(ctx.request.url).searchParams.get("screen") === "1";
+      const { role, participantId } = await this.resolveRole(profileId, wantsScreen);
       connection.setState({ role, profileId, participantId });
     } catch {
       // Fail closed: an invalid/missing token, an unresolvable profile, or a
@@ -264,7 +290,19 @@ export class EventRoom extends Server<Env> {
       return;
     }
 
+    // Resend the current snapshot plus whatever the current step's results
+    // and the event's rankings are (if any) — a reconnecting client renders
+    // current state directly, never a replay of missed transitions (FR-063,
+    // design.md D2).
     this.sendState(connection);
+    if (this.#state.lastStepResults) {
+      const cached: StepResultsMessage = { type: "step_results", ...this.#state.lastStepResults };
+      connection.send(JSON.stringify(cached));
+    }
+    if (this.#state.lastRankings) {
+      const cached: RankingsMessage = { type: "rankings", ...this.#state.lastRankings };
+      connection.send(JSON.stringify(cached));
+    }
   }
 
   override onMessage(connection: Connection<ConnState>, message: WSMessage): void {
@@ -297,6 +335,9 @@ export class EventRoom extends Server<Env> {
       case "mc:reveal":
         void this.handleMcReveal(connection);
         return;
+      case "operator:display":
+        this.handleOperatorDisplay(connection, command.payload);
+        return;
       default:
         this.sendError(connection, "unknown_command", `Unknown command: ${command.type}`);
     }
@@ -318,6 +359,33 @@ export class EventRoom extends Server<Env> {
 
     const { state: nextState, changed } = applyMutation(this.#state, (current) =>
       current.controllerId === state.profileId ? current : { ...current, controllerId: state.profileId },
+    );
+    this.#state = nextState;
+
+    if (changed) {
+      this.persistState();
+      this.broadcastState();
+    }
+  }
+
+  /**
+   * `operator:display` (design.md D3) — any admin, not flow-controller-gated
+   * (mirrors `mc:claim_control`'s ungated check): "Operator mode" is
+   * independent of who currently holds MC flow control per the Actor table.
+   */
+  private handleOperatorDisplay(connection: Connection<ConnState>, payload: unknown): void {
+    const state = connection.state;
+    if (!state || state.role !== "admin") {
+      this.sendError(connection, "forbidden", "Only an admin may set the display directive");
+      return;
+    }
+    if (!isOperatorDisplayPayload(payload)) {
+      this.sendError(connection, "invalid_message", "operator:display requires a valid view");
+      return;
+    }
+
+    const { state: nextState, changed } = applyMutation(this.#state, (current) =>
+      current.display === payload.view ? current : { ...current, display: payload.view },
     );
     this.#state = nextState;
 
@@ -379,6 +447,11 @@ export class EventRoom extends Server<Env> {
       eventStatus: "live",
       step: this.toRoomStep(firstStep, "active", timerStartedAt),
       question,
+      // A new step is active — any cached results belonged to no prior step
+      // here, but clear defensively for the same reason mc:advance does
+      // (design.md D2, big-screen-presentation): never let a reconnecting
+      // client see results attributed to the wrong step.
+      lastStepResults: null,
     }));
     this.#state = nextState;
 
@@ -426,6 +499,12 @@ export class EventRoom extends Server<Env> {
         ...current,
         step: this.toRoomStep(nextStepRow as StepRow, "active", timerStartedAt),
         question,
+        // The new step hasn't been revealed yet — clear the prior step's
+        // cached results so a reconnecting client never sees them attributed
+        // to this one (design.md D2, big-screen-presentation, FR-063).
+        // `lastRankings` is deliberately left untouched: it's cumulative and
+        // still current.
+        lastStepResults: null,
       };
     });
     this.#state = nextState;
@@ -679,25 +758,32 @@ export class EventRoom extends Server<Env> {
       return;
     }
 
-    const { state: nextState, changed } = applyMutation(this.#state, (current) => {
-      if (!current.step || current.step.id !== step.id || current.step.status !== "locked") return current;
-      return { ...current, step: { ...current.step, status: "revealed" } };
-    });
-    this.#state = nextState;
-    if (!changed) return; // stale guard — the step moved on some other way while this was in flight.
-
-    this.persistState();
-    this.broadcastState();
-
     const stepResults: StepResultsMessage = {
       type: "step_results",
       stepId: step.id,
       participants: scoringResult.participants,
       teams: scoringResult.teams,
     };
-    this.broadcast(JSON.stringify(stepResults));
-
     const rankings = await this.computeRankings(roster);
+
+    // Cache both alongside the step's own `revealed` transition (design.md
+    // D2, big-screen-presentation) — one mutation, one persist, so a
+    // reconnecting client can be caught up without replaying anything.
+    const { state: nextState, changed } = applyMutation(this.#state, (current) => {
+      if (!current.step || current.step.id !== step.id || current.step.status !== "locked") return current;
+      return {
+        ...current,
+        step: { ...current.step, status: "revealed" },
+        lastStepResults: stepResults,
+        lastRankings: rankings,
+      };
+    });
+    this.#state = nextState;
+    if (!changed) return; // stale guard — the step moved on some other way while this was in flight.
+
+    this.persistState();
+    this.broadcastState();
+    this.broadcast(JSON.stringify(stepResults));
     this.broadcast(JSON.stringify(rankings));
 
     for (const otherConnection of this.getConnections<ConnState>()) {

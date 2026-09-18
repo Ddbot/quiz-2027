@@ -1,7 +1,6 @@
 // EventRoom WebSocket message envelope (SPEC.md §7.4.2). Portable per
 // NFR-017 — grows as later milestones add real commands to the same shapes.
-import type { RoomState } from "./room.js";
-import type { ParticipantStepResult, TeamStepResult } from "./scoring.js";
+import type { RoomDisplay, RoomRankings, RoomState, RoomStepResults } from "./room.js";
 
 /** Client → Server command envelope. */
 export interface ClientCommand {
@@ -40,6 +39,12 @@ export interface McRevealCommand extends ClientCommand {
   type: "mc:reveal";
 }
 
+/** `operator:display` (event-room capability) — any admin, not flow-controller-gated (design.md D3). */
+export interface OperatorDisplayCommand extends ClientCommand {
+  type: "operator:display";
+  payload: { view: RoomDisplay };
+}
+
 /** Server → Client `state` message (SPEC.md §7.4.2), sent on connect/reconnect and every change. */
 export interface StateMessage {
   type: "state";
@@ -74,24 +79,22 @@ export interface AnswerAckMessage {
 /**
  * Server → Client `step_results` (SPEC.md §7.4.2), broadcast to every
  * connection on `mc:reveal` — per-participant/per-team outcome, never which
- * option was correct (scoring capability, event-room capability).
+ * option was correct (scoring capability, event-room capability). Shares its
+ * data shape with `RoomState.lastStepResults` (design.md D2) so the cached
+ * value can be resent verbatim on reconnect.
  */
-export interface StepResultsMessage {
+export interface StepResultsMessage extends RoomStepResults {
   type: "step_results";
-  stepId: string;
-  participants: ParticipantStepResult[];
-  teams: TeamStepResult[];
 }
 
 /**
  * Server → Client `rankings` (SPEC.md §7.4.2), broadcast alongside
  * `step_results` — the event's cumulative individual/team standings,
- * recomputed fresh from Postgres on every reveal (design.md D5).
+ * recomputed fresh from Postgres on every reveal (design.md D5). Shares its
+ * data shape with `RoomState.lastRankings`.
  */
-export interface RankingsMessage {
+export interface RankingsMessage extends RoomRankings {
   type: "rankings";
-  individuals: { participantId: string; displayName: string; total: number; rank: number }[];
-  teams: { teamId: string; name: string; total: number; rank: number }[];
 }
 
 /**

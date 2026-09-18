@@ -61,6 +61,19 @@ describe("useEventRoom", () => {
     expect(instances[0]!.opts.query?.token).toBe("token-abc");
   });
 
+  it("adds screen=1 to the query when connecting as a screen (big-screen capability)", () => {
+    renderHook(() => useEventRoom("evt-1", "token-abc", { screen: true }));
+
+    expect(instances).toHaveLength(1);
+    expect(instances[0]!.opts.query).toEqual({ token: "token-abc", screen: "1" });
+  });
+
+  it("does not add screen to the query for a normal (player) connection", () => {
+    renderHook(() => useEventRoom("evt-1", "token-abc"));
+
+    expect(instances[0]!.opts.query).toEqual({ token: "token-abc" });
+  });
+
   it("updates connection status on open and exposed state on a state message", async () => {
     const { result } = renderHook(() => useEventRoom("evt-1", "token-abc"));
     const socket = instances[0]!;
