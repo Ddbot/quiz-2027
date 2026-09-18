@@ -163,7 +163,13 @@ function ResultsView({
   );
 }
 
-/** Leaderboard and podium share the same cumulative-rankings data (design.md D8). */
+/**
+ * Leaderboard and podium share the same cumulative-rankings data (design.md
+ * D8) — both individual AND team standings (reveal-leaderboard-end design.md
+ * D6: `rankings.teams` has always been broadcast since MILESTONE-08, this
+ * view simply never rendered it before now). The teams section is omitted
+ * entirely, not shown empty, when the event has no teams.
+ */
 function LeaderboardView({
   copy,
   rankings,
@@ -176,31 +182,59 @@ function LeaderboardView({
   topOnly?: boolean;
 }) {
   const individuals = rankings?.individuals ?? [];
-  const shown = topOnly ? individuals.slice(0, 3) : individuals;
+  const teams = rankings?.teams ?? [];
+  const shownIndividuals = topOnly ? individuals.slice(0, 3) : individuals;
+  const shownTeams = topOnly ? teams.slice(0, 3) : teams;
 
   return (
     <div
       data-testid={topOnly ? "screen-podium-view" : "screen-leaderboard-view"}
-      className="flex w-full max-w-2xl flex-col items-center gap-6 text-center"
+      className="flex w-full max-w-4xl flex-col items-center gap-6 text-center"
     >
       <h1 className="text-3xl font-bold sm:text-5xl">{title}</h1>
-      {shown.length === 0 ? (
+      {shownIndividuals.length === 0 && shownTeams.length === 0 ? (
         <p className="text-xl text-neutral-300">{copy.noRankingsYet}</p>
       ) : (
-        <ol className="flex w-full flex-col gap-2 text-left">
-          {shown.map((entry) => (
-            <li
-              key={entry.participantId}
-              data-testid={`screen-ranking-${entry.participantId}`}
-              className="flex items-center justify-between rounded-md border border-white/20 p-3 text-lg"
-            >
-              <span>
-                #{entry.rank} {entry.displayName}
-              </span>
-              <span>{entry.total}</span>
-            </li>
-          ))}
-        </ol>
+        <div className="flex w-full flex-col gap-8 sm:flex-row sm:justify-center sm:gap-12">
+          {shownIndividuals.length > 0 && (
+            <section className="flex flex-1 flex-col gap-2">
+              <h2 className="text-xl font-semibold">{copy.individualsLabel}</h2>
+              <ol className="flex w-full flex-col gap-2 text-left">
+                {shownIndividuals.map((entry) => (
+                  <li
+                    key={entry.participantId}
+                    data-testid={`screen-ranking-${entry.participantId}`}
+                    className="flex items-center justify-between rounded-md border border-white/20 p-3 text-lg"
+                  >
+                    <span>
+                      #{entry.rank} {entry.displayName}
+                    </span>
+                    <span>{entry.total}</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+          {shownTeams.length > 0 && (
+            <section className="flex flex-1 flex-col gap-2">
+              <h2 className="text-xl font-semibold">{copy.teamsLabel}</h2>
+              <ol className="flex w-full flex-col gap-2 text-left">
+                {shownTeams.map((entry) => (
+                  <li
+                    key={entry.teamId}
+                    data-testid={`screen-team-ranking-${entry.teamId}`}
+                    className="flex items-center justify-between rounded-md border border-white/20 p-3 text-lg"
+                  >
+                    <span>
+                      #{entry.rank} {entry.name}
+                    </span>
+                    <span>{entry.total}</span>
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+        </div>
       )}
     </div>
   );

@@ -45,6 +45,16 @@ export interface OperatorDisplayCommand extends ClientCommand {
   payload: { view: RoomDisplay };
 }
 
+/** `mc:show_leaderboard` (event-room capability) — flow-controller only; always recomputes/rebroadcasts (design.md D5). */
+export interface McShowLeaderboardCommand extends ClientCommand {
+  type: "mc:show_leaderboard";
+}
+
+/** `mc:end` (event-room capability) — flow-controller only; finalises the event (design.md D2). */
+export interface McEndCommand extends ClientCommand {
+  type: "mc:end";
+}
+
 /** Server → Client `state` message (SPEC.md §7.4.2), sent on connect/reconnect and every change. */
 export interface StateMessage {
   type: "state";

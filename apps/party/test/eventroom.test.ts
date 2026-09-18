@@ -960,7 +960,7 @@ describe("mc:reveal", () => {
     ws.close();
   });
 
-  it("rejects revealing when there is no current step", async () => {
+  it("rejects revealing when there is no current step (event never started, so not_live fires first — reveal-leaderboard-end design.md D3)", async () => {
     const admin = await trackedAdmin("reveal-nostep-admin");
     const eventId = await makeDraftEvent();
     await createStep(eventId, 1);
@@ -969,7 +969,7 @@ describe("mc:reveal", () => {
     const ws = await connectAndClaimControl(eventId, admin);
     ws.send(JSON.stringify({ type: "mc:reveal" }));
     const response = await waitForMessage(ws);
-    expect(response).toMatchObject({ type: "error", code: "not_locked" });
+    expect(response).toMatchObject({ type: "error", code: "not_live" });
     ws.close();
   });
 
@@ -1203,6 +1203,312 @@ describe("mc:reveal", () => {
     },
     15000,
   );
+});
+
+describe("mc:show_leaderboard", () => {
+  it("recomputes rankings and sets the display directive", async () => {
+    const admin = await trackedAdmin("leaderboard-admin");
+    const player = await trackedPlayer("leaderboard-player");
+    const eventId = await makeDraftEvent();
+    const step = await createStep(eventId, 1, { pointsCorrect: 4 });
+    await addParticipant(eventId, player, "LeaderboardPlayer");
+
+    const ws = await connectAndClaimControl(eventId, admin);
+    ws.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(ws);
+    await submitAnswer(eventId, player, step.id, "a");
+    ws.send(JSON.stringify({ type: "mc:lock" }));
+    await waitForMessage(ws);
+    ws.send(JSON.stringify({ type: "mc:reveal" }));
+    await waitForMessage(ws); // state
+    await waitForMessage(ws); // step_results
+    await waitForMessage(ws); // rankings
+
+    ws.send(JSON.stringify({ type: "mc:show_leaderboard" }));
+    const stateUpdate = await waitForMessage(ws);
+    expect(stateUpdate).toMatchObject({ type: "state", display: "leaderboard" });
+    const rankings = await waitForMessage(ws);
+    expect(rankings.type).toBe("rankings");
+    expect(rankings.individuals).toEqual(expect.arrayContaining([expect.objectContaining({ total: 4 })]));
+
+    ws.close();
+  });
+
+  it("rejects a non-controller", async () => {
+    const admin = await trackedAdmin("leaderboard-noncontrol-admin");
+    const other = await trackedAdmin("leaderboard-noncontrol-other");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1);
+
+    const controllerWs = await connectAndClaimControl(eventId, admin);
+    controllerWs.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(controllerWs);
+
+    const otherWs = await connect(eventId, other.accessToken);
+    await waitForMessage(otherWs);
+    otherWs.send(JSON.stringify({ type: "mc:show_leaderboard" }));
+    const response = await waitForMessage(otherWs);
+    expect(response).toMatchObject({ type: "error", code: "forbidden" });
+
+    controllerWs.close();
+    otherWs.close();
+  });
+
+  it("a repeated call still re-broadcasts, not a silent no-op (design.md D5)", async () => {
+    const admin = await trackedAdmin("leaderboard-repeat-admin");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1);
+
+    const ws = await connectAndClaimControl(eventId, admin);
+    ws.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(ws);
+
+    ws.send(JSON.stringify({ type: "mc:show_leaderboard" }));
+    await waitForMessage(ws); // state
+    await waitForMessage(ws); // rankings
+
+    ws.send(JSON.stringify({ type: "mc:show_leaderboard" }));
+    const second = await waitForMessageOrTimeout(ws, 500);
+    expect(second).not.toBe("timeout"); // still broadcasts, unlike e.g. mc:claim_control's idempotent no-op
+
+    ws.close();
+  });
+});
+
+describe("mc:end", () => {
+  it("finalises the event: Postgres event_final_* rows, event.status/ended_at, and a final rankings broadcast", async () => {
+    const admin = await trackedAdmin("end-admin");
+    const player = await trackedPlayer("end-player");
+    const eventId = await makeDraftEvent();
+    const step = await createStep(eventId, 1, { pointsCorrect: 3 });
+    const participantId = await addParticipant(eventId, player, "EndPlayer");
+
+    const ws = await connectAndClaimControl(eventId, admin);
+    ws.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(ws);
+    await submitAnswer(eventId, player, step.id, "a");
+    ws.send(JSON.stringify({ type: "mc:lock" }));
+    await waitForMessage(ws);
+    ws.send(JSON.stringify({ type: "mc:reveal" }));
+    await waitForMessage(ws); // state
+    await waitForMessage(ws); // step_results
+    await waitForMessage(ws); // rankings
+
+    ws.send(JSON.stringify({ type: "mc:end" }));
+    const stateUpdate = await waitForMessage(ws);
+    expect(stateUpdate).toMatchObject({ type: "state", eventStatus: "ended" });
+    const rankings = await waitForMessage(ws);
+    expect(rankings.type).toBe("rankings");
+
+    const eventRow = await adminClient().from("event").select("status, ended_at").eq("id", eventId).single();
+    expect(eventRow.data?.status).toBe("ended");
+    expect(eventRow.data?.ended_at).not.toBeNull();
+
+    const finalParticipant = await adminClient()
+      .from("event_final_participant")
+      .select("total_points, rank")
+      .eq("event_id", eventId)
+      .eq("participant_id", participantId)
+      .single();
+    expect(finalParticipant.data).toEqual({ total_points: 3, rank: 1 });
+
+    ws.close();
+  });
+
+  it("rejects a non-controller", async () => {
+    const admin = await trackedAdmin("end-noncontrol-admin");
+    const other = await trackedAdmin("end-noncontrol-other");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1);
+
+    const controllerWs = await connectAndClaimControl(eventId, admin);
+    controllerWs.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(controllerWs);
+
+    const otherWs = await connect(eventId, other.accessToken);
+    await waitForMessage(otherWs);
+    otherWs.send(JSON.stringify({ type: "mc:end" }));
+    const response = await waitForMessage(otherWs);
+    expect(response).toMatchObject({ type: "error", code: "forbidden" });
+
+    controllerWs.close();
+    otherWs.close();
+  });
+
+  it("rejects ending an event that is not live (never started)", async () => {
+    const admin = await trackedAdmin("end-notlive-admin");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1);
+
+    const ws = await connectAndClaimControl(eventId, admin);
+    ws.send(JSON.stringify({ type: "mc:end" }));
+    const response = await waitForMessage(ws);
+    expect(response).toMatchObject({ type: "error", code: "not_live" });
+    ws.close();
+  });
+
+  it(
+    "when the flush fails on every retry, sends end_failed and leaves the event live",
+    async () => {
+      const admin = await trackedAdmin("end-fail-admin");
+      const eventId = await makeDraftEvent();
+      await createStep(eventId, 1);
+
+      const ws = await connectAndClaimControl(eventId, admin);
+      ws.send(JSON.stringify({ type: "mc:start" }));
+      await waitForMessage(ws);
+
+      // Simulate a concurrent modification: flip the event's real Postgres
+      // status away from "live" out from under the DO's own in-memory view
+      // (which still reads "live"). The final `event` update's
+      // `.eq("status","live")` guard then genuinely and deterministically
+      // matches 0 rows on every retry — not a mock, a real Postgres outcome.
+      await adminClient().from("event").update({ status: "draft" }).eq("id", eventId);
+
+      ws.send(JSON.stringify({ type: "mc:end" }));
+      const response = await waitForMessage(ws);
+      expect(response).toMatchObject({ type: "error", code: "end_failed" });
+
+      const eventRow = await adminClient().from("event").select("status").eq("id", eventId).single();
+      expect(eventRow.data?.status).toBe("draft"); // untouched by the failed flush
+
+      ws.close();
+    },
+    15000,
+  );
+});
+
+describe("permanently read-only after mc:end (reveal-leaderboard-end design.md D3/D4)", () => {
+  it("mc:lock is rejected once the event has ended", async () => {
+    const admin = await trackedAdmin("readonly-lock-admin");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1);
+
+    const ws = await connectAndClaimControl(eventId, admin);
+    ws.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(ws); // step active, never locked
+    ws.send(JSON.stringify({ type: "mc:end" }));
+    await waitForMessage(ws); // state
+    await waitForMessage(ws); // rankings
+
+    ws.send(JSON.stringify({ type: "mc:lock" }));
+    const response = await waitForMessage(ws);
+    expect(response).toMatchObject({ type: "error", code: "not_live" });
+    ws.close();
+  });
+
+  it("mc:reveal is rejected once the event has ended", async () => {
+    const admin = await trackedAdmin("readonly-reveal-admin");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1);
+
+    const ws = await connectAndClaimControl(eventId, admin);
+    ws.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(ws);
+    ws.send(JSON.stringify({ type: "mc:lock" }));
+    await waitForMessage(ws);
+    ws.send(JSON.stringify({ type: "mc:end" }));
+    await waitForMessage(ws); // state
+    await waitForMessage(ws); // rankings
+
+    ws.send(JSON.stringify({ type: "mc:reveal" }));
+    const response = await waitForMessage(ws);
+    expect(response).toMatchObject({ type: "error", code: "not_live" });
+    ws.close();
+  });
+
+  it("answer:submit is rejected once the event has ended", async () => {
+    const admin = await trackedAdmin("readonly-answer-admin");
+    const player = await trackedPlayer("readonly-answer-player");
+    const eventId = await makeDraftEvent();
+    const step = await createStep(eventId, 1);
+    await addParticipant(eventId, player, "ReadOnlyPlayer");
+
+    const controllerWs = await connectAndClaimControl(eventId, admin);
+    controllerWs.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(controllerWs);
+    controllerWs.send(JSON.stringify({ type: "mc:end" }));
+    await waitForMessage(controllerWs); // state
+    await waitForMessage(controllerWs); // rankings
+
+    const playerWs = await connect(eventId, player.accessToken);
+    await waitForMessage(playerWs); // state
+    await waitForMessage(playerWs); // cached rankings, resent on connect since mc:end set lastRankings
+    playerWs.send(JSON.stringify({ type: "answer:submit", payload: { stepId: step.id, optionId: "a" } }));
+    const response = await waitForMessage(playerWs);
+    expect(response).toMatchObject({ type: "error", code: "not_active" });
+
+    controllerWs.close();
+    playerWs.close();
+  });
+
+  it("a pending step-expiry alarm firing after mc:end is a safe no-op (design.md D4)", async () => {
+    const admin = await trackedAdmin("readonly-alarm-admin");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1, { timed: true, countdownSeconds: 30 });
+
+    const ws = await connectAndClaimControl(eventId, admin);
+    ws.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(ws); // step active with a pending expiry alarm
+    ws.send(JSON.stringify({ type: "mc:end" }));
+    await waitForMessage(ws); // state
+    await waitForMessage(ws); // rankings
+    ws.close();
+
+    const stub = await getServerByName<Env, EventRoom>(env.EventRoom, eventId);
+    const before = await runInDurableObject(stub, (instance) => {
+      return instance.sql<{ data: string }>`select data from room_state where id = 0`;
+    });
+
+    // Manually invoke the alarm path directly, as if a pending alarm had
+    // fired right after mc:end succeeded (the race window design.md D4
+    // describes) — must be a byte-for-byte no-op.
+    await runInDurableObject(stub, async (instance) => {
+      await instance.onAlarm();
+    });
+    const after = await runInDurableObject(stub, (instance) => {
+      return instance.sql<{ data: string }>`select data from room_state where id = 0`;
+    });
+    expect(after[0]!.data).toBe(before[0]!.data);
+  });
+
+  it("mc:end cancels any pending step-expiry alarm", async () => {
+    const admin = await trackedAdmin("readonly-cancel-admin");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1, { timed: true, countdownSeconds: 30 });
+
+    const ws = await connectAndClaimControl(eventId, admin);
+    ws.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(ws); // step active — an alarm is now scheduled
+    ws.send(JSON.stringify({ type: "mc:end" }));
+    await waitForMessage(ws); // state
+    await waitForMessage(ws); // rankings
+    ws.close();
+
+    const stub = await getServerByName<Env, EventRoom>(env.EventRoom, eventId);
+    const alarm = await runInDurableObject(stub, (instance) => {
+      return (instance as unknown as { ctx: DurableObjectState }).ctx.storage.getAlarm();
+    });
+    expect(alarm).toBeNull();
+  });
+
+  it("operator:display still works after the event has ended (the screen must still be drivable to the podium)", async () => {
+    const admin = await trackedAdmin("readonly-display-admin");
+    const eventId = await makeDraftEvent();
+    await createStep(eventId, 1);
+
+    const ws = await connectAndClaimControl(eventId, admin);
+    ws.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(ws);
+    ws.send(JSON.stringify({ type: "mc:end" }));
+    await waitForMessage(ws); // state
+    await waitForMessage(ws); // rankings
+
+    ws.send(JSON.stringify({ type: "operator:display", payload: { view: "podium" } }));
+    const response = await waitForMessage(ws);
+    expect(response).toMatchObject({ type: "state", display: "podium" });
+    ws.close();
+  });
 });
 
 describe("screen role", () => {

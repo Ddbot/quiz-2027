@@ -110,6 +110,23 @@ export function LiveControlPage() {
         >
           {adminCopy.revealButton}
         </Button>
+        <Button
+          type="button"
+          disabled={!isController || state?.eventStatus !== "live"}
+          onClick={() => sendCommand("mc:show_leaderboard")}
+        >
+          {adminCopy.showLeaderboardButton}
+        </Button>
+        <Button
+          type="button"
+          variant="destructive"
+          disabled={!isController || state?.eventStatus !== "live"}
+          onClick={() => {
+            if (window.confirm(adminCopy.endEventConfirm)) sendCommand("mc:end");
+          }}
+        >
+          {adminCopy.endEventButton}
+        </Button>
       </div>
 
       <section className="flex flex-col gap-2">

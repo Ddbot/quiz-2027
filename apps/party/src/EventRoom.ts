@@ -256,11 +256,14 @@ export class EventRoom extends Server<Env> {
   /**
    * Locks the current step if (and only if) it is still `active` — the
    * shared idempotent core for both the explicit `mc:lock` command and the
-   * alarm-driven auto-lock at expiry (design.md D3).
+   * alarm-driven auto-lock at expiry (design.md D3). Also guards on
+   * `eventStatus === "live"` (reveal-leaderboard-end design.md D4) — the
+   * event may have ended while a timed step's alarm was still pending;
+   * without this, that alarm firing afterward would still mutate state.
    */
   private lockCurrentStepIfActive(): void {
     const { state: nextState, changed } = applyMutation(this.#state, (current) => {
-      if (!current.step || current.step.status !== "active") return current;
+      if (current.eventStatus !== "live" || !current.step || current.step.status !== "active") return current;
       return { ...current, step: { ...current.step, status: "locked" } };
     });
     this.#state = nextState;
@@ -337,6 +340,12 @@ export class EventRoom extends Server<Env> {
         return;
       case "operator:display":
         this.handleOperatorDisplay(connection, command.payload);
+        return;
+      case "mc:show_leaderboard":
+        void this.handleMcShowLeaderboard(connection);
+        return;
+      case "mc:end":
+        void this.handleMcEnd(connection);
         return;
       default:
         this.sendError(connection, "unknown_command", `Unknown command: ${command.type}`);
@@ -516,13 +525,28 @@ export class EventRoom extends Server<Env> {
     }
   }
 
-  /** `mc:lock` — explicit lock, sharing the same idempotent core as the alarm-driven one. */
+  /**
+   * `mc:lock` — explicit lock, sharing the same idempotent core as the
+   * alarm-driven one. Rejects once the event has ended (reveal-leaderboard-end
+   * design.md D3) — a real gap found while adding `mc:end`: nothing needed
+   * this check before, since `eventStatus` was always `"live"` by the time a
+   * step could be locked.
+   */
   private handleMcLock(connection: Connection<ConnState>): void {
     if (!this.requireController(connection)) return;
+    if (this.#state.eventStatus !== "live") {
+      this.sendError(connection, "not_live", "This event is not currently live");
+      return;
+    }
     this.lockCurrentStepIfActive();
   }
 
-  /** `answer:submit` (design.md D4/D5/D7). */
+  /**
+   * `answer:submit` (design.md D4/D5/D7). Rejects once the event has ended
+   * (reveal-leaderboard-end design.md D3) — folded into the existing
+   * step-not-active check, since "the event has ended" and "this step isn't
+   * accepting answers" are the same user-facing fact.
+   */
   private async handleAnswerSubmit(connection: Connection<ConnState>, payload: unknown): Promise<void> {
     const callerState = connection.state;
     if (!callerState || callerState.role !== "player" || !callerState.participantId) {
@@ -536,7 +560,7 @@ export class EventRoom extends Server<Env> {
     const { stepId, optionId } = payload;
 
     const step = this.#state.step;
-    if (!step || step.id !== stepId || step.status !== "active") {
+    if (this.#state.eventStatus !== "live" || !step || step.id !== stepId || step.status !== "active") {
       this.sendError(connection, "not_active", "This step is not currently accepting answers");
       return;
     }
@@ -671,9 +695,15 @@ export class EventRoom extends Server<Env> {
    * `mc:reveal` (design.md D2/D3/D4/D5) — scores the just-locked step,
    * persists to Postgres with retry, then transitions/broadcasts only once
    * that flush has actually succeeded (design.md D4: persist-then-transition).
+   * Rejects once the event has ended (reveal-leaderboard-end design.md D3).
    */
   private async handleMcReveal(connection: Connection<ConnState>): Promise<void> {
     if (!this.requireController(connection)) return;
+
+    if (this.#state.eventStatus !== "live") {
+      this.sendError(connection, "not_live", "This event is not currently live");
+      return;
+    }
 
     const step = this.#state.step;
     if (step && step.status === "revealed") return; // idempotent no-op — already done.
@@ -798,6 +828,104 @@ export class EventRoom extends Server<Env> {
       };
       otherConnection.send(JSON.stringify(ownResult));
     }
+  }
+
+  /**
+   * `mc:show_leaderboard` (design.md D5) — always recomputes and re-broadcasts,
+   * even if the display was already "leaderboard": unlike `mc:claim_control`'s
+   * idempotency, repeating this command is a meaningful "refresh the
+   * standings now" action each time (cumulative totals may have changed
+   * since it was last shown).
+   */
+  private async handleMcShowLeaderboard(connection: Connection<ConnState>): Promise<void> {
+    if (!this.requireController(connection)) return;
+    if (this.#state.eventStatus !== "live") {
+      this.sendError(connection, "not_live", "This event is not currently live");
+      return;
+    }
+
+    const roster = await this.fetchRoster();
+    const rankings = await this.computeRankings(roster);
+
+    this.#state = { ...this.#state, display: "leaderboard", lastRankings: rankings };
+    this.persistState();
+    this.broadcastState();
+    this.broadcast(JSON.stringify(rankings));
+  }
+
+  /**
+   * `mc:end` (design.md D1/D2/D4) — computes and persists final rankings,
+   * finalising the event. Persist-then-transition, exactly like `mc:reveal`:
+   * only mutates/broadcasts once the Postgres flush has actually succeeded.
+   */
+  private async handleMcEnd(connection: Connection<ConnState>): Promise<void> {
+    if (!this.requireController(connection)) return;
+    if (this.#state.eventStatus !== "live") {
+      this.sendError(connection, "not_live", "This event is not currently live");
+      return;
+    }
+
+    const roster = await this.fetchRoster();
+    const rankings = await this.computeRankings(roster);
+    const finalParticipantRows = rankings.individuals.map((r) => ({
+      event_id: this.name,
+      participant_id: r.participantId,
+      total_points: r.total,
+      rank: r.rank,
+    }));
+    const finalTeamRows = rankings.teams.map((r) => ({
+      event_id: this.name,
+      team_id: r.teamId,
+      total_awarded: r.total,
+      rank: r.rank,
+    }));
+    const endedAt = new Date().toISOString();
+
+    const flushed = await withRetry(async () => {
+      const supabase = this.getSupabase();
+      if (finalParticipantRows.length > 0) {
+        const { error } = await supabase
+          .from("event_final_participant")
+          .upsert(finalParticipantRows, { onConflict: "event_id,participant_id" });
+        if (error) throw new Error(error.message);
+      }
+      if (finalTeamRows.length > 0) {
+        const { error } = await supabase
+          .from("event_final_team")
+          .upsert(finalTeamRows, { onConflict: "event_id,team_id" });
+        if (error) throw new Error(error.message);
+      }
+      const { data: updatedEvent, error: eventError } = await supabase
+        .from("event")
+        .update({ status: "ended", ended_at: endedAt })
+        .eq("id", this.name)
+        .eq("status", "live")
+        .select("id")
+        .maybeSingle();
+      if (eventError) throw new Error(eventError.message);
+      if (!updatedEvent) throw new Error("event was not live at flush time");
+    });
+
+    if (!flushed) {
+      this.sendError(connection, "end_failed", "Could not finalise this event — try again");
+      return;
+    }
+
+    // No pending step-expiry alarm should ever fire after this (design.md
+    // D4) — `lockCurrentStepIfActive` also guards on `eventStatus === "live"`
+    // as a second layer, for the race window where an alarm is already in
+    // flight when this succeeds.
+    void this.ctx.storage.deleteAlarm();
+
+    const { state: nextState, changed } = applyMutation(this.#state, (current) =>
+      current.eventStatus !== "live" ? current : { ...current, eventStatus: "ended", lastRankings: rankings },
+    );
+    this.#state = nextState;
+    if (!changed) return; // stale guard — ended some other way while this was in flight.
+
+    this.persistState();
+    this.broadcastState();
+    this.broadcast(JSON.stringify(rankings));
   }
 
   private sendState(connection: Connection<ConnState>): void {

@@ -78,11 +78,6 @@ describe("FR-061 — only results/leaderboard show player-entered content", () =
     expect(screen.queryByText("Alice")).not.toBeInTheDocument();
   });
 
-  it("the podium view shows no team name (only ranked individuals by design)", () => {
-    renderView("podium", { rankings });
-    expect(screen.queryByText("Team A")).not.toBeInTheDocument();
-  });
-
   it("the blank view shows no player-entered content", () => {
     renderView("blank");
     expect(screen.queryByText("Alice")).not.toBeInTheDocument();
@@ -96,6 +91,26 @@ describe("FR-061 — only results/leaderboard show player-entered content", () =
   it("the leaderboard view may show participant names", () => {
     renderView("leaderboard", { rankings });
     expect(screen.getByText(/Alice/)).toBeInTheDocument();
+  });
+});
+
+describe("Leaderboard/podium show both individual and team standings (reveal-leaderboard-end)", () => {
+  it("the leaderboard view shows team standings alongside individual ones", () => {
+    renderView("leaderboard", { rankings });
+    expect(screen.getByText(/Alice/)).toBeInTheDocument();
+    expect(screen.getByText(/Team A/)).toBeInTheDocument();
+  });
+
+  it("the podium view shows team standings alongside individual ones", () => {
+    renderView("podium", { rankings });
+    expect(screen.getByText(/Alice/)).toBeInTheDocument();
+    expect(screen.getByText(/Team A/)).toBeInTheDocument();
+  });
+
+  it("the teams section is omitted, not shown empty, when the event has no teams", () => {
+    renderView("leaderboard", { rankings: { individuals: rankings.individuals, teams: [] } });
+    expect(screen.getByText(/Alice/)).toBeInTheDocument();
+    expect(screen.queryByText(copy.teamsLabel)).not.toBeInTheDocument();
   });
 });
 
