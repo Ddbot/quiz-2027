@@ -10,10 +10,12 @@ type ModerationState =
 
 /**
  * The event's participant/team roster for the console's moderation section
- * (mc-console capability, moderation-kill-switch) — a plain fetch-on-mount +
- * refetch-after-action hook, matching `useEventEditor`/`useTeamLobby`'s
- * convention (no realtime subscription). Works for any `eventStatus`
- * (design.md D5) since the underlying RPCs carry no status restriction.
+ * (mc-console capability, moderation-kill-switch) — fetch-on-mount,
+ * refetch-after-the-admin's-own-action, AND a Postgres realtime subscription
+ * so the list also updates when someone joins/renames/etc. from elsewhere
+ * (production feedback: the admin previously had to reload the page to see
+ * a newly-joined participant). Works for any `eventStatus` (design.md D5)
+ * since the underlying RPCs carry no status restriction.
  */
 export function useModeration(eventId: string | undefined) {
   const [state, setState] = useState<ModerationState>({ status: "loading" });
@@ -39,6 +41,27 @@ export function useModeration(eventId: string | undefined) {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  useEffect(() => {
+    if (!eventId) return;
+    const channel = supabase
+      .channel(`moderation-${eventId}`)
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "participant", filter: `event_id=eq.${eventId}` },
+        () => reload(),
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "team", filter: `event_id=eq.${eventId}` },
+        () => reload(),
+      )
+      .subscribe();
+
+    return () => {
+      void channel.unsubscribe();
+    };
+  }, [eventId, reload]);
 
   async function setParticipantHidden(participantId: string, hidden: boolean): Promise<boolean> {
     const { error } = await supabase.rpc("moderate_participant", {

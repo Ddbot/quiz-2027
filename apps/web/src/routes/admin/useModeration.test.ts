@@ -1,10 +1,29 @@
 import { renderHook, waitFor } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { from, rpc } = vi.hoisted(() => ({ from: vi.fn(), rpc: vi.fn() }));
+const { from, rpc, channel, realtimeCallbacks } = vi.hoisted(() => ({
+  from: vi.fn(),
+  rpc: vi.fn(),
+  channel: vi.fn(),
+  // Captures each table's postgres_changes callback so a test can trigger
+  // one directly, standing in for a real Postgres change arriving.
+  realtimeCallbacks: new Map<string, () => void>(),
+}));
+
+channel.mockImplementation(() => {
+  const channelStub = {
+    on: vi.fn((_event: string, config: { table: string }, callback: () => void) => {
+      realtimeCallbacks.set(config.table, callback);
+      return channelStub;
+    }),
+    subscribe: vi.fn(() => channelStub),
+    unsubscribe: vi.fn(),
+  };
+  return channelStub;
+});
 
 vi.mock("@/lib/supabase", () => ({
-  supabase: { from, rpc },
+  supabase: { from, rpc, channel },
 }));
 
 const { useModeration } = await import("@/routes/admin/useModeration");
@@ -26,6 +45,7 @@ function mockFrom() {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  realtimeCallbacks.clear();
 });
 
 describe("useModeration", () => {
@@ -87,5 +107,37 @@ describe("useModeration", () => {
 
     const ok = await result.current.setParticipantHidden("p-1", true);
     expect(ok).toBe(false);
+  });
+
+  it("refetches when a Postgres change arrives on participant, without any admin action (production feedback)", async () => {
+    mockFrom();
+    const { result } = renderHook(() => useModeration("evt-1"));
+    await waitFor(() => expect(result.current.status).toBe("loaded"));
+
+    expect(from).toHaveBeenCalledTimes(2); // initial load: participant + team
+    const onParticipantChange = realtimeCallbacks.get("participant");
+    expect(onParticipantChange).toBeTypeOf("function");
+
+    onParticipantChange?.();
+    await waitFor(() => expect(from).toHaveBeenCalledTimes(4)); // reload: participant + team again
+  });
+
+  it("subscribes with a filter scoped to the event", () => {
+    mockFrom();
+    renderHook(() => useModeration("evt-1"));
+
+    const onCalls = (channel.mock.results[0]?.value as { on: ReturnType<typeof vi.fn> }).on.mock.calls;
+    expect(onCalls).toEqual([
+      [
+        "postgres_changes",
+        { event: "*", schema: "public", table: "participant", filter: "event_id=eq.evt-1" },
+        expect.any(Function),
+      ],
+      [
+        "postgres_changes",
+        { event: "*", schema: "public", table: "team", filter: "event_id=eq.evt-1" },
+        expect.any(Function),
+      ],
+    ]);
   });
 });
