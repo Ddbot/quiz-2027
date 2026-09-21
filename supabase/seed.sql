@@ -1,5 +1,6 @@
--- Local-only seed data, applied by `supabase db reset`.
+ -- Local-only seed data, applied by `supabase db reset`.
 -- Deliberately empty: identity-bearing fixtures (a draft event with
--- participants) need `auth.users` rows, which requires the Supabase Admin
+-- participants, and a fixed-credential dev admin — admin@test.com /
+-- 00000000) need `auth.users` rows, which requires the Supabase Admin
 -- API, not plain SQL. Run `pnpm --filter db seed` after resetting instead
 -- (see openspec/changes/data-model-rls/design.md D7).
