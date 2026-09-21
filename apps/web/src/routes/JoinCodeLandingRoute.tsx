@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Link, useNavigate } from "react-router-dom";
 
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/hooks/useAuth";
 import { getPlayerCopy } from "@/routes/player/copy";
 
 /**
@@ -12,6 +13,7 @@ import { getPlayerCopy } from "@/routes/player/copy";
  */
 export function JoinCodeLandingRoute() {
   const copy = getPlayerCopy(null);
+  const { session } = useAuth();
   const navigate = useNavigate();
   const [code, setCode] = useState("");
 
@@ -47,6 +49,12 @@ export function JoinCodeLandingRoute() {
       <Link to="/admin" className="text-muted-foreground text-sm underline">
         {copy.landingAdminLink}
       </Link>
+
+      {session && (
+        <Link to="/account" className="text-muted-foreground text-sm underline">
+          {copy.accountLink}
+        </Link>
+      )}
     </main>
   );
 }

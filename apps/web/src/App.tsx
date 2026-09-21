@@ -1,5 +1,6 @@
 import { Route, Routes } from "react-router-dom";
 
+import { AccountRoute } from "@/routes/AccountRoute";
 import { AdminRoute } from "@/routes/AdminRoute";
 import { JoinCodeLandingRoute } from "@/routes/JoinCodeLandingRoute";
 import { PrivacyRoute } from "@/routes/legal/PrivacyRoute";
@@ -18,6 +19,7 @@ export function App() {
   return (
     <Routes>
       <Route path="/" element={<JoinCodeLandingRoute />} />
+      <Route path="/account" element={<AccountRoute />} />
       <Route path="/e/:joinCode" element={<PlayerRoute />} />
       <Route path="/admin/*" element={<AdminRoute />} />
       <Route path="/screen/:eventId" element={<ScreenRoute />} />
