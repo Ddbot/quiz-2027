@@ -81,6 +81,20 @@ export const playerCopy = {
 
     eventEndedTitle: "L'événement est terminé",
     eventEndedBody: "Merci d'avoir joué !",
+
+    accountLink: "Gérer mon compte",
+    accountBack: "Retour",
+    accountPageTitle: "Mon compte",
+    accountExportTitle: "Exporter mes données",
+    accountExportBody: "Récupérez une copie de votre profil, vos participations et vos réponses.",
+    accountExportButton: "Exporter mes données",
+    accountDeleteTitle: "Supprimer mon compte",
+    accountDeleteBody:
+      "Vos informations personnelles seront supprimées. Vos scores resteront enregistrés, mais ne seront plus associés à votre identité.",
+    accountDeleteButton: "Supprimer mon compte",
+    accountDeleteConfirm: "Supprimer définitivement votre compte ? Cette action est irréversible.",
+    accountActionError: "Une erreur est survenue. Merci de réessayer.",
+    accountSignedOutNotice: "Vous devez être connecté pour accéder à cette page.",
   },
   en: {
     heading: "Quiz 2027",
@@ -158,6 +172,20 @@ export const playerCopy = {
 
     eventEndedTitle: "The event has ended",
     eventEndedBody: "Thanks for playing!",
+
+    accountLink: "Manage my account",
+    accountBack: "Back",
+    accountPageTitle: "My account",
+    accountExportTitle: "Export my data",
+    accountExportBody: "Get a copy of your profile, participations, and answers.",
+    accountExportButton: "Export my data",
+    accountDeleteTitle: "Delete my account",
+    accountDeleteBody:
+      "Your personal information will be removed. Your scores will remain on record, but will no longer be linked to your identity.",
+    accountDeleteButton: "Delete my account",
+    accountDeleteConfirm: "Permanently delete your account? This action cannot be undone.",
+    accountActionError: "Something went wrong. Please try again.",
+    accountSignedOutNotice: "You need to be signed in to access this page.",
   },
 } as const;
 
