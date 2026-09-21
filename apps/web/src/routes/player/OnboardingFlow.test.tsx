@@ -33,6 +33,7 @@ function pendingQuery(): PromiseLike<never> & Record<string, () => unknown> {
   query.select = () => pendingQuery();
   query.eq = () => pendingQuery();
   query.single = () => pendingQuery();
+  query.maybeSingle = () => pendingQuery();
   return query;
 }
 from.mockImplementation(() => pendingQuery());
@@ -503,5 +504,117 @@ describe("OnboardingFlow", () => {
     renderFlow({ ...draftEventFr, language: "en" });
     expect(screen.getByLabelText(/display name/i)).toBeInTheDocument();
     expect(screen.getByText(/how would you like to join/i)).toBeInTheDocument();
+  });
+});
+
+describe("OnboardingFlow — reload rejoins directly (resilience-recovery-hardening)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } });
+    from.mockImplementation(() => pendingQuery());
+    socketInstances.length = 0;
+  });
+
+  it("switches straight to JoinedView when the session already has a participant for this event", async () => {
+    getSession.mockResolvedValue({
+      data: { session: { access_token: "existing-token", user: { id: "u-existing" } } },
+    });
+    from.mockImplementation((table: string) => {
+      if (table === "participant") {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({
+                maybeSingle: () =>
+                  Promise.resolve({ data: { id: "p-existing", display_name: "ReturningPlayer" }, error: null }),
+              }),
+            }),
+          }),
+        };
+      }
+      return pendingQuery();
+    });
+
+    // A `live` event with no `state` message dispatched: neither
+    // TeamLobbyStep (needs "draft") nor LiveGameView (needs `state`
+    // truthy) render, so only the joined header shows — keeping this test
+    // isolated from TeamLobbyStep's own, differently-shaped `participant`
+    // query.
+    renderFlow({ ...draftEventFr, status: "live" });
+
+    expect(await screen.findByTestId("joined-display-name")).toHaveTextContent("ReturningPlayer");
+    expect(screen.queryByLabelText(/nom affiché/i)).not.toBeInTheDocument();
+  });
+
+  it("keeps showing the identity flow when the session has no participant for this event", async () => {
+    getSession.mockResolvedValue({
+      data: { session: { access_token: "fresh-token", user: { id: "u-fresh" } } },
+    });
+    from.mockImplementation((table: string) => {
+      if (table === "participant") {
+        return {
+          select: () => ({
+            eq: () => ({
+              eq: () => ({ maybeSingle: () => Promise.resolve({ data: null, error: null }) }),
+            }),
+          }),
+        };
+      }
+      return pendingQuery();
+    });
+
+    renderFlow();
+
+    expect(await screen.findByLabelText(/nom affiché/i)).toBeInTheDocument();
+    expect(screen.queryByTestId("joined-display-name")).not.toBeInTheDocument();
+  });
+});
+
+describe("OnboardingFlow — connection status indicator (resilience-recovery-hardening)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    getSession.mockResolvedValue({ data: { session: null } });
+    onAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } });
+    from.mockImplementation(() => pendingQuery());
+    socketInstances.length = 0;
+  });
+
+  async function joinAndGetSocket(user: ReturnType<typeof userEvent.setup>) {
+    getSession.mockResolvedValue({
+      data: { session: { access_token: "test-token", user: { id: "u-conn" } } },
+    });
+    signInAnonymously.mockResolvedValue({ error: null });
+    rpc.mockResolvedValue({
+      data: { participant: { id: "p-conn", display_name: "Alice" }, event: { id: draftEventFr.id } },
+      error: null,
+    });
+
+    renderFlow();
+    await user.type(screen.getByLabelText(/nom affiché/i), "Alice");
+    await user.click(screen.getByLabelText(/plus de 16 ans/i));
+    await user.click(screen.getByLabelText(/conditions d'utilisation/i));
+    await user.click(screen.getByRole("button", { name: /continuer/i }));
+    await user.click(await screen.findByRole("button", { name: /confirmer et rejoindre/i }));
+    await waitFor(() => expect(screen.getByTestId("joined-display-name")).toHaveTextContent("Alice"));
+    await waitFor(() => expect(socketInstances).toHaveLength(1));
+    return socketInstances[0]!;
+  }
+
+  it("shows a reconnecting indicator before the connection has opened", async () => {
+    const user = userEvent.setup();
+    await joinAndGetSocket(user);
+
+    expect(screen.getByTestId("connection-status-indicator")).toBeInTheDocument();
+  });
+
+  it("hides the indicator once the connection opens, and shows it again after it closes", async () => {
+    const user = userEvent.setup();
+    const socket = await joinAndGetSocket(user);
+
+    socket.dispatchEvent(new Event("open"));
+    await waitFor(() => expect(screen.queryByTestId("connection-status-indicator")).not.toBeInTheDocument());
+
+    socket.dispatchEvent(new Event("close"));
+    await waitFor(() => expect(screen.getByTestId("connection-status-indicator")).toBeInTheDocument());
   });
 });

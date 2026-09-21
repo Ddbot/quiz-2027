@@ -9,6 +9,7 @@ import { NameConfirmStep } from "@/routes/player/NameConfirmStep";
 import { TeamLobbyStep } from "@/routes/player/TeamLobbyStep";
 import type { EventSummary } from "@/routes/player/types";
 import { useEventRoom } from "@/routes/player/useEventRoom";
+import { useExistingParticipant } from "@/routes/player/useExistingParticipant";
 import { useJoinEvent, type JoinedParticipant } from "@/routes/player/useJoinEvent";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
@@ -24,6 +25,23 @@ export function OnboardingFlow({ event }: { event: EventSummary }) {
   const [step, setStep] = useState<FlowStep>({ name: "identity" });
   const [clientFlaggedProfanity, setClientFlaggedProfanity] = useState(false);
   const { status, errorKind, participant, join } = useJoinEvent(event.join_code);
+  const { session } = useAuth();
+  const existingParticipant = useExistingParticipant(event.id, session);
+
+  // Reload-rejoin (resilience-recovery-hardening design.md D1): a session
+  // that already has a participant for this event switches straight to
+  // JoinedView once the check resolves, instead of leaving the
+  // identity/consent form up. Deliberately does NOT gate the identity
+  // form's own render on this check settling first — `existingParticipant`
+  // starts "loading" on every mount, so blocking here would delay the
+  // normal (non-reload) case's very first paint behind an extra async hop
+  // for no benefit, since nothing renders differently until "found"
+  // actually happens. The trade-off is a brief flash of the identity form
+  // before switching, only for a genuine reload with an existing session —
+  // accepted as strictly better than blocking every mount.
+  if (existingParticipant.status === "found") {
+    return <JoinedView copy={copy} event={event} participant={existingParticipant.participant} />;
+  }
 
   // Instant client-side profanity check (moderation-kill-switch design.md
   // D1) — a UX improvement layered in front of the unchanged, authoritative
@@ -136,7 +154,7 @@ interface JoinedViewProps {
  */
 function JoinedView({ copy, event, participant }: JoinedViewProps) {
   const { session } = useAuth();
-  const { state, answerAck, lastError, ownResult, sendCommand, isExpired } = useEventRoom(
+  const { state, connectionStatus, answerAck, lastError, ownResult, sendCommand, isExpired } = useEventRoom(
     event.id,
     session?.access_token,
   );
@@ -155,6 +173,15 @@ function JoinedView({ copy, event, participant }: JoinedViewProps) {
         <h2 className="text-lg font-semibold">{copy.joinedTitle}</h2>
         <p data-testid="joined-display-name">{participant.display_name}</p>
       </div>
+      {/* `partysocket` already auto-reconnects with backoff (FR-086) — this
+          is purely so the player sees *something* while that happens,
+          instead of a screen indistinguishable from a healthy connection
+          (resilience-recovery-hardening design.md D2). */}
+      {connectionStatus !== "open" && (
+        <p data-testid="connection-status-indicator" role="status" className="text-muted-foreground text-center text-sm">
+          {copy.reconnectingNotice}
+        </p>
+      )}
       {effectiveStatus === "draft" && (
         <TeamLobbyStep copy={copy} eventId={event.id} participantId={participant.id} />
       )}
