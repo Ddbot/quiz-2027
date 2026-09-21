@@ -34,5 +34,5 @@
 
 ## 7. Close-out (production-touching — confirm with the owner before each step)
 
-- [ ] 7.1 `supabase db push` to production (drops `event_one_live_idx` there) — ask for explicit confirmation before running, per this project's established process for any production-touching step.
-- [ ] 7.2 After the production push, confirm with the owner: this is safe to verify passively (no event has been live twice at once in production yet, so there's nothing to observe breaking) — no owner-run verification step is needed beyond the push itself succeeding.
+- [x] 7.1 `supabase db push` to production (drops `event_one_live_idx` there) — ask for explicit confirmation before running, per this project's established process for any production-touching step. **Done**: owner confirmed and ran the push themselves (environment permission-blocked the assistant from running it directly). Verified afterward: `supabase migration list --linked` shows `20260921160000` applied remotely, matching local; a direct `supabase db query --linked` confirms `event_one_live_idx` no longer exists on `public.event` in production.
+- [x] 7.2 After the production push, confirm with the owner: this is safe to verify passively (no event has been live twice at once in production yet, so there's nothing to observe breaking) — no owner-run verification step is needed beyond the push itself succeeding. **Done**: passive verification above is sufficient; no further owner action needed.
