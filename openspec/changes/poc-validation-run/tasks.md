@@ -41,4 +41,4 @@
 
 ## 6. Close-out
 
-- [ ] 6.1 No production-touching change this milestone (the harness/report/e2e spec are all dev/CI tooling — nothing pushes to production Supabase or the deployed Worker). Confirm the new CI step is green on `main` after merge. Then present the finished `POC_VALIDATION_REPORT.md` to the owner and get their G-5 answer if task 4.2 didn't already capture it.
+- [x] 6.1 No production-touching change this milestone (the harness/report/e2e spec are all dev/CI tooling — nothing pushes to production Supabase or the deployed Worker). Confirm the new CI step is green on `main` after merge. Then present the finished `POC_VALIDATION_REPORT.md` to the owner and get their G-5 answer if task 4.2 didn't already capture it. **Done**: PR #38 merged into `main` (squash); local `main` synced. Post-merge CI run on `main` (35637274427) green on the first try, including the new "PoC validation harness" step. G-5 was already captured in task 4.2 (owner confirmed €0 spend before merge).
