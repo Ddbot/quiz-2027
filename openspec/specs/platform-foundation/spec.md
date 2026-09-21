@@ -87,12 +87,12 @@ Before this change is considered complete, it SHALL be confirmed on the live pla
 
 ### Requirement: One real-time object per event with a connect-and-echo contract
 
-The real-time worker SHALL route every connection for a given event identifier to a single stateful object dedicated to that event. In this baseline the object SHALL accept a WebSocket connection and echo any text message back to the sender. It SHALL NOT yet perform authentication or any game logic.
+The real-time worker SHALL route every connection for a given event identifier to a single stateful object dedicated to that event. The object authenticates each connection and holds real event state (see the `event-room` capability) rather than echoing; it SHALL NOT accept a connection whose token fails JWT verification.
 
 #### Scenario: Connection is accepted and echoes
 
-- **WHEN** a client opens a WebSocket to the worker for event identifier `E` and sends a text message
-- **THEN** the same message is returned to that client
+- **WHEN** a client with a valid Supabase JWT opens a WebSocket to the worker for event identifier `E`
+- **THEN** the connection is accepted and assigned a role, and no longer merely echoes messages (see the `event-room` capability for the full connection and state contract)
 
 #### Scenario: Same event identifier shares one object
 
