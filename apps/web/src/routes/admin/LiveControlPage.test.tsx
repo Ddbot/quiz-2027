@@ -28,11 +28,12 @@ vi.mock("partysocket", () => ({
   }),
 }));
 
-const { getSession, onAuthStateChange, from, rpc } = vi.hoisted(() => ({
+const { getSession, onAuthStateChange, from, rpc, channel } = vi.hoisted(() => ({
   getSession: vi.fn(),
   onAuthStateChange: vi.fn(),
   from: vi.fn(),
   rpc: vi.fn(),
+  channel: vi.fn(),
 }));
 
 // The moderation section (ModerationSection/useModeration) fetches via
@@ -48,9 +49,16 @@ function pendingQuery(): PromiseLike<never> & Record<string, () => unknown> {
   return query;
 }
 from.mockImplementation(() => pendingQuery());
+// The moderation section's realtime subscription — a chainable no-op stub,
+// same rationale as `pendingQuery` above.
+channel.mockImplementation(() => ({
+  on: vi.fn().mockReturnThis(),
+  subscribe: vi.fn().mockReturnThis(),
+  unsubscribe: vi.fn(),
+}));
 
 vi.mock("@/lib/supabase", () => ({
-  supabase: { auth: { getSession, onAuthStateChange }, from, rpc },
+  supabase: { auth: { getSession, onAuthStateChange }, from, rpc, channel },
 }));
 
 const { AuthProvider } = await import("@/components/AuthProvider");
