@@ -535,6 +535,24 @@ describe("mc:start", () => {
     ws.close();
   });
 
+  it("writes current_step_id and step.timer_started_at to Postgres (analytics-dashboard design D2)", async () => {
+    const admin = await trackedAdmin("start-analytics-admin");
+    const eventId = await makeDraftEvent();
+    const step = await createStep(eventId, 1);
+
+    const ws = await connectAndClaimControl(eventId, admin);
+    ws.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(ws);
+
+    const eventRow = await adminClient().from("event").select("current_step_id").eq("id", eventId).single();
+    expect(eventRow.data?.current_step_id).toBe(step.id);
+
+    const stepRow = await adminClient().from("step").select("timer_started_at").eq("id", step.id).single();
+    expect(stepRow.data?.timer_started_at).not.toBeNull();
+
+    ws.close();
+  });
+
   it("rejects a non-controller", async () => {
     const admin = await trackedAdmin("start-noncontrol-admin");
     const eventId = await makeDraftEvent();
@@ -596,6 +614,34 @@ describe("mc:advance", () => {
     expect(advanced.step).toMatchObject({ position: 2, status: "active" });
     expect((advanced.step as { id: string }).id).not.toBe(firstStepId);
     expect(advanced.question).toMatchObject({ text: "Question for step 2" });
+    ws.close();
+  });
+
+  it("writes current_step_id and step.timer_started_at to Postgres, distinct from the prior step's (analytics-dashboard design D2)", async () => {
+    const admin = await trackedAdmin("advance-analytics-admin");
+    const eventId = await makeDraftEvent();
+    const stepOne = await createStep(eventId, 1);
+    const stepTwo = await createStep(eventId, 2);
+
+    const ws = await connectAndClaimControl(eventId, admin);
+    ws.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(ws);
+    const stepOneRowAfterStart = await adminClient()
+      .from("step")
+      .select("timer_started_at")
+      .eq("id", stepOne.id)
+      .single();
+
+    ws.send(JSON.stringify({ type: "mc:advance" }));
+    await waitForMessage(ws);
+
+    const eventRow = await adminClient().from("event").select("current_step_id").eq("id", eventId).single();
+    expect(eventRow.data?.current_step_id).toBe(stepTwo.id);
+
+    const stepTwoRow = await adminClient().from("step").select("timer_started_at").eq("id", stepTwo.id).single();
+    expect(stepTwoRow.data?.timer_started_at).not.toBeNull();
+    expect(stepTwoRow.data?.timer_started_at).not.toBe(stepOneRowAfterStart.data?.timer_started_at);
+
     ws.close();
   });
 

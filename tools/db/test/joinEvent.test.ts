@@ -182,6 +182,137 @@ describe("join_event", () => {
   });
 });
 
+describe("join_event stamps joined_at_position (analytics-dashboard design D1)", () => {
+  let draftEvent: Row;
+  let liveEventNoStep: Row;
+  let liveEventWithStep: Row;
+  let stepTwo: Row;
+
+  beforeAll(async () => {
+    draftEvent = await makeEvent("POSDRAFT", "draft");
+    // Deliberately left `draft` (not `live`) — only one `live` event may
+    // exist system-wide at a time, and `join_event`'s position resolution
+    // depends only on `current_step_id` being null, not on `status` itself,
+    // so a second live event here would test nothing this one doesn't.
+    liveEventNoStep = await makeEvent("POSLIVE1", "draft");
+
+    liveEventWithStep = await makeEvent("POSLIVE2", "draft");
+    const stepOne = await admin
+      .from("step")
+      .insert({ event_id: liveEventWithStep.id, position: 1 })
+      .select()
+      .single();
+    if (stepOne.error) throw new Error(`step 1 insert failed: ${stepOne.error.message}`);
+    const stepTwoResult = await admin
+      .from("step")
+      .insert({ event_id: liveEventWithStep.id, position: 2 })
+      .select()
+      .single();
+    if (stepTwoResult.error) throw new Error(`step 2 insert failed: ${stepTwoResult.error.message}`);
+    stepTwo = stepTwoResult.data as Row;
+
+    // Simulate mc:start/mc:advance having reached step 2 — this is exactly
+    // what EventRoom.ts's handleMcStart/handleMcAdvance now write to
+    // Postgres (design D2), reproduced directly here since this RPC's
+    // behavior is fully determined by Postgres state, independent of the
+    // Durable Object layer.
+    const update = await admin
+      .from("event")
+      .update({ status: "live", current_step_id: stepTwo.id })
+      .eq("id", liveEventWithStep.id);
+    if (update.error) throw new Error(`event update failed: ${update.error.message}`);
+  });
+
+  afterAll(async () => {
+    await admin.from("event").delete().eq("id", liveEventNoStep.id);
+    await admin.from("event").delete().eq("id", liveEventWithStep.id);
+  });
+
+  it("stamps 0 for a participant joining before the event starts", async () => {
+    const joiner = await createPlayer("pos-draft-joiner");
+    const client = createUserClient(joiner.accessToken);
+    const { error } = await client.rpc("join_event", {
+      p_join_code: draftEvent.join_code,
+      p_display_name: "DraftJoiner",
+    });
+    expect(error).toBeNull();
+
+    const row = await admin
+      .from("participant")
+      .select("joined_at_position")
+      .eq("event_id", draftEvent.id)
+      .eq("profile_id", joiner.profileId)
+      .single();
+    expect(row.data?.joined_at_position).toBe(0);
+  });
+
+  it("stamps 0 for an event with no current step recorded yet", async () => {
+    const joiner = await createPlayer("pos-live-nostep-joiner");
+    const client = createUserClient(joiner.accessToken);
+    const { error } = await client.rpc("join_event", {
+      p_join_code: liveEventNoStep.join_code,
+      p_display_name: "NoStepJoiner",
+    });
+    expect(error).toBeNull();
+
+    const row = await admin
+      .from("participant")
+      .select("joined_at_position")
+      .eq("event_id", liveEventNoStep.id)
+      .eq("profile_id", joiner.profileId)
+      .single();
+    expect(row.data?.joined_at_position).toBe(0);
+  });
+
+  it("stamps the current step's position for a late joiner", async () => {
+    const lateJoiner = await createPlayer("pos-late-joiner");
+    const client = createUserClient(lateJoiner.accessToken);
+    const { error } = await client.rpc("join_event", {
+      p_join_code: liveEventWithStep.join_code,
+      p_display_name: "LateJoiner",
+    });
+    expect(error).toBeNull();
+
+    const row = await admin
+      .from("participant")
+      .select("joined_at_position")
+      .eq("event_id", liveEventWithStep.id)
+      .eq("profile_id", lateJoiner.profileId)
+      .single();
+    expect(row.data?.joined_at_position).toBe(stepTwo.position);
+  });
+
+  it("leaves joined_at_position unchanged on a repeat join, even if the current step later advances", async () => {
+    const joiner = await createPlayer("pos-repeat-joiner");
+    const client = createUserClient(joiner.accessToken);
+    await client.rpc("join_event", {
+      p_join_code: liveEventWithStep.join_code,
+      p_display_name: "RepeatJoiner",
+    });
+    const firstRow = await admin
+      .from("participant")
+      .select("joined_at_position")
+      .eq("event_id", liveEventWithStep.id)
+      .eq("profile_id", joiner.profileId)
+      .single();
+    expect(firstRow.data?.joined_at_position).toBe(stepTwo.position);
+
+    // The event "advances" further — a repeat join must not recompute.
+    await admin.from("event").update({ current_step_id: null }).eq("id", liveEventWithStep.id);
+    await client.rpc("join_event", {
+      p_join_code: liveEventWithStep.join_code,
+      p_display_name: "RepeatJoiner",
+    });
+    const secondRow = await admin
+      .from("participant")
+      .select("joined_at_position")
+      .eq("event_id", liveEventWithStep.id)
+      .eq("profile_id", joiner.profileId)
+      .single();
+    expect(secondRow.data?.joined_at_position).toBe(stepTwo.position);
+  });
+});
+
 describe("event_public_summary", () => {
   let publicEvent: Row;
 

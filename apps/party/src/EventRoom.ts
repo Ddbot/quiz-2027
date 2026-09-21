@@ -477,10 +477,15 @@ export class EventRoom extends Server<Env> {
     }
     const firstStep = steps[0] as StepRow;
 
+    // `current_step_id` rides along in the same atomic `event` update as
+    // `status`/`season_year` (analytics-dashboard design D2) — it's what
+    // `join_event` needs to stamp a late joiner's `joined_at_position`
+    // correctly, so it must be exactly as reliable as the status transition
+    // it accompanies, not a separate best-effort write.
     const seasonYear = new Date().getUTCFullYear();
     const { data: updatedEvent, error: updateError } = await supabase
       .from("event")
-      .update({ status: "live", season_year: seasonYear })
+      .update({ status: "live", season_year: seasonYear, current_step_id: firstStep.id })
       .eq("id", this.name)
       .eq("status", "draft")
       .select("id")
@@ -491,6 +496,20 @@ export class EventRoom extends Server<Env> {
     }
 
     const timerStartedAt = new Date().toISOString();
+
+    // `step.timer_started_at` (analytics-dashboard design D2) — the basis
+    // for the dashboard's average response time. Best-effort: unlike
+    // `current_step_id` above, nothing in the live game depends on this
+    // succeeding, so a failure here must not roll back an already-successful
+    // event start.
+    const { error: stepTimeError } = await supabase
+      .from("step")
+      .update({ timer_started_at: timerStartedAt })
+      .eq("id", firstStep.id);
+    if (stepTimeError) {
+      console.error(`mc:start: failed to record step.timer_started_at for ${firstStep.id}: ${stepTimeError.message}`);
+    }
+
     const question = await this.fetchQuestion(firstStep.id);
 
     const { state: nextState, changed } = applyMutation(this.#state, (current) => ({
@@ -538,9 +557,32 @@ export class EventRoom extends Server<Env> {
       this.sendError(connection, "no_next_step", "This is the last step");
       return;
     }
+    const nextStep = nextStepRow as StepRow;
+
+    // `event.current_step_id` (analytics-dashboard design D2) — gating, same
+    // reliability requirement as `mc:start`'s own write of this field
+    // (join_event depends on it to stamp a late joiner correctly).
+    const { error: currentStepError } = await supabase
+      .from("event")
+      .update({ current_step_id: nextStep.id })
+      .eq("id", this.name);
+    if (currentStepError) {
+      this.sendError(connection, "advance_failed", "Could not advance to the next step — try again");
+      return;
+    }
 
     const timerStartedAt = new Date().toISOString();
-    const question = await this.fetchQuestion((nextStepRow as StepRow).id);
+
+    // `step.timer_started_at` — best-effort, same rationale as `mc:start`'s.
+    const { error: stepTimeError } = await supabase
+      .from("step")
+      .update({ timer_started_at: timerStartedAt })
+      .eq("id", nextStep.id);
+    if (stepTimeError) {
+      console.error(`mc:advance: failed to record step.timer_started_at for ${nextStep.id}: ${stepTimeError.message}`);
+    }
+
+    const question = await this.fetchQuestion(nextStep.id);
 
     const { state: nextState, changed } = applyMutation(this.#state, (current) => {
       // Stale/idempotent guard: only advance if the step we computed a
@@ -548,7 +590,7 @@ export class EventRoom extends Server<Env> {
       if (!current.step || current.step.id !== currentStep.id) return current;
       return {
         ...current,
-        step: this.toRoomStep(nextStepRow as StepRow, "active", timerStartedAt),
+        step: this.toRoomStep(nextStep, "active", timerStartedAt),
         question,
         // The new step hasn't been revealed yet — clear the prior step's
         // cached results so a reconnecting client never sees them attributed

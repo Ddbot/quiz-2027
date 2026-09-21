@@ -2,6 +2,7 @@ import { Route, Routes } from "react-router-dom";
 
 import { AdminGuard } from "@/routes/admin/AdminGuard";
 import { adminCopy } from "@/routes/admin/copy";
+import { DashboardPage } from "@/routes/admin/DashboardPage";
 import { EventEditorPage } from "@/routes/admin/EventEditorPage";
 import { EventListPage } from "@/routes/admin/EventListPage";
 import { LiveControlPage } from "@/routes/admin/LiveControlPage";
@@ -22,6 +23,7 @@ export function AdminRoute() {
           <Route path="events/:eventId" element={<EventEditorPage />} />
           <Route path="events/:eventId/steps/:stepId" element={<StepEditorPage />} />
           <Route path="events/:eventId/live" element={<LiveControlPage />} />
+          <Route path="events/:eventId/dashboard" element={<DashboardPage />} />
         </Routes>
       </AdminGuard>
     </main>
