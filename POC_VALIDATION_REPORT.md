@@ -185,25 +185,16 @@ manual DO-restart procedure, since nothing in this milestone touches
 
 This cannot be verified from inside this codebase or CI — it requires
 checking the actual Cloudflare, Supabase, and Vercel billing dashboards for
-this project. **Owner confirmation is requested and pending** (see below).
+this project. **Owner confirmed**: measured spend is €0.
 
-**Status: pending owner confirmation.**
+**Status: met.**
 
 ## G-6 — Decision-ready
 
 > On completion the owner can make an informed go/no-go decision on the
 > commercial phase.
 
-G-1 through G-4 are met with concrete, re-checkable evidence above; G-5
-awaits the owner's own billing-dashboard check. Once G-5 is confirmed, every
-goal SPEC.md set for the PoC has either been proven or explicitly handed to
-the owner to confirm — there is nothing further this codebase can prove on
-its own. The go/no-go decision itself is the owner's to make.
-
----
-
-## Open item for the owner
-
-**G-5**: please check the Cloudflare, Supabase, and Vercel dashboards for
-this project and confirm measured spend is €0. This report will be updated
-with your answer once received.
+G-1 through G-5 are all met — every goal SPEC.md set for the PoC has been
+proven or, for G-5, confirmed directly by the owner against the real billing
+dashboards. There is nothing further this codebase can prove on its own. The
+go/no-go decision itself is the owner's to make.

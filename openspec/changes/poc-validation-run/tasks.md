@@ -20,7 +20,7 @@
 ## 4. PoC validation report
 
 - [x] 4.1 Write `POC_VALIDATION_REPORT.md` at the repo root (design.md, structure per proposal.md's G-1..G-6 breakdown) — G-1 cites `eventroom.test.ts`'s `"propagation timing (FR-031 acceptance)"` suite (quote its actual assertion) plus this milestone's own harness run; G-2 cites the harness's successful unattended run and task 3.3's Playwright result; G-3 cites task 1.5's passing hand-calculated assertions; G-4 cites `event-room-core/tasks.md` task 5.4 and `resilience-recovery-hardening/tasks.md` task 5.1 verbatim (re-read both before quoting — do not paraphrase from memory); G-5 is left as an explicit open question for the owner (design.md D5) — verify every citation in the report actually matches what the cited file currently says, by re-reading each source at write time, not from earlier context. **Done**: re-read `eventroom.test.ts` (quoted `expect(elapsedMs).toBeLessThan(2000)` verbatim), `event-room-core/tasks.md` task 5.4 and `resilience-recovery-hardening/tasks.md` task 5.1 (both quoted verbatim) at write time.
-- [ ] 4.2 Ask the owner directly for G-5's confirmation (real Cloudflare/Supabase/Vercel billing dashboards checked, €0 spend) and record their answer in the report — this is a close-out step, not something to do unprompted mid-implementation.
+- [x] 4.2 Ask the owner directly for G-5's confirmation (real Cloudflare/Supabase/Vercel billing dashboards checked, €0 spend) and record their answer in the report — this is a close-out step, not something to do unprompted mid-implementation. **Done**: owner confirmed measured spend is €0; recorded in the report (G-5 now "met").
 
 ## 5. Verification and traceability
 
