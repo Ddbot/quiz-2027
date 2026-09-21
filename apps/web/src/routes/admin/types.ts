@@ -11,7 +11,7 @@ export interface AdminEvent {
   created_at: string;
 }
 
-/** Shape of `public.step` rows. */
+/** Shape of `public.step` rows, with its `game_mcq` question text embedded (null until the step's content is authored). */
 export interface AdminStep {
   id: string;
   event_id: string;
@@ -21,6 +21,7 @@ export interface AdminStep {
   points_correct: number;
   team_award_points: number;
   status: "pending" | "active" | "locked" | "revealed" | "done";
+  game_mcq: { question_text: string } | null;
 }
 
 export interface McqOption {

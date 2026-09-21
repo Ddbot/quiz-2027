@@ -20,6 +20,7 @@ const STEP: AdminStep = {
   points_correct: 1,
   team_award_points: 0,
   status: "pending",
+  game_mcq: null,
 };
 
 function mockWrites() {

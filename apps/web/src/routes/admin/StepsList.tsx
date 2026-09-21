@@ -62,9 +62,9 @@ export function StepsList({ event, steps, readOnly, onChange }: Props) {
         {steps.map((step, index) => (
           <li key={step.id} className="flex items-center justify-between gap-2 rounded-md border p-3">
             <span>
-              {index + 1}. {adminCopy.stepEditorTitle}
+              {index + 1}. {step.game_mcq?.question_text ?? adminCopy.stepEditorTitle}
             </span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-1"> 
               {!readOnly && (
                 <>
                   <Button
