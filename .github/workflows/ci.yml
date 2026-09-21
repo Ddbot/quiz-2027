@@ -75,3 +75,13 @@ jobs:
 
       - name: Shared package isolation
         run: pnpm check:shared-isolation
+
+      # tools/harness (poc-validation-run, FR-087) needs a real listening
+      # `wrangler dev` for apps/party, spawned as its own child process — it
+      # is not part of `pnpm test`'s in-process workspace fan-out above.
+      # Reuses the same local Supabase instance and apps/party/.dev.vars the
+      # Test step already set up (design.md D6) — SUPABASE_URL/ANON_KEY/
+      # SERVICE_ROLE_KEY are already in $GITHUB_ENV from the "Configure
+      # tools/db and apps/party env" step.
+      - name: PoC validation harness
+        run: pnpm --filter harness start
