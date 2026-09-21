@@ -24,7 +24,7 @@ const EVENT: AdminEvent = {
   created_at: "2026-01-01T00:00:00Z",
 };
 
-function step(id: string, position: number): AdminStep {
+function step(id: string, position: number, questionText: string | null = null): AdminStep {
   return {
     id,
     event_id: EVENT.id,
@@ -34,6 +34,7 @@ function step(id: string, position: number): AdminStep {
     points_correct: 1,
     team_award_points: 0,
     status: "pending",
+    game_mcq: questionText === null ? null : { question_text: questionText },
   };
 }
 
@@ -111,5 +112,19 @@ describe("StepsList", () => {
     expect(screen.queryByRole("button", { name: /ajouter une étape/i })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: /^supprimer$/i })).not.toBeInTheDocument();
     expect(screen.getByRole("link", { name: /modifier/i })).toBeInTheDocument();
+  });
+
+  it("shows the step's real question text once authored", () => {
+    mockCalls();
+    renderList([step("s1", 1, "2 + 2 = ?")]);
+
+    expect(screen.getByText("1. 2 + 2 = ?")).toBeInTheDocument();
+  });
+
+  it("falls back to a generic label before the step has any question content", () => {
+    mockCalls();
+    renderList([step("s1", 1)]);
+
+    expect(screen.getByText("1. Étape")).toBeInTheDocument();
   });
 });

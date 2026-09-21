@@ -16,7 +16,11 @@ export function useEventEditor(eventId: string | undefined) {
     if (!eventId) return;
     Promise.all([
       supabase.from("event").select("*").eq("id", eventId).maybeSingle(),
-      supabase.from("step").select("*").eq("event_id", eventId).order("position", { ascending: true }),
+      supabase
+        .from("step")
+        .select("*, game_mcq(question_text)")
+        .eq("event_id", eventId)
+        .order("position", { ascending: true }),
     ]).then(([eventResult, stepsResult]) => {
       if (eventResult.error || !eventResult.data) {
         setState({ status: "not-found" });
