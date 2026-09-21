@@ -118,6 +118,25 @@ export const adminCopy = {
   killSwitchButton: "Activer le coupe-circuit",
   killSwitchClearButton: "Désactiver le coupe-circuit",
   killSwitchActiveNotice: "Le coupe-circuit est actif : tous les écrans et téléphones sont masqués.",
+
+  dashboardLink: "Tableau de bord",
+  dashboardTitle: "Tableau de bord",
+  dashboardBack: "Retour à l'événement",
+  dashboardLoadError: "Le tableau de bord n'a pas pu être chargé.",
+  participantCountLabel: "Participants",
+  completionRateLabel: "Taux de complétion",
+  avgResponseTimeLabel: "Temps de réponse moyen",
+  perQuestionTitle: "Détail par question",
+  questionPositionLabel: "Question",
+  correctLabel: "Bonnes réponses",
+  incorrectLabel: "Mauvaises réponses",
+  finalIndividualRankingsTitle: "Classement individuel final",
+  finalTeamRankingsTitle: "Classement des équipes final",
+  noFinalRankingsYet: "Aucun classement final pour le moment.",
+  rankLabel: "Rang",
+  pointsLabel: "Points",
+  participantLabel: "Participant",
+  teamLabel: "Équipe",
 } as const;
 
 export type AdminCopy = typeof adminCopy;

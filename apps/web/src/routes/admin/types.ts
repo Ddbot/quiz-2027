@@ -49,3 +49,14 @@ export interface AdminTeam {
   name: string;
   hidden: boolean;
 }
+
+/** Shape of the `event_dashboard` RPC's response (analytics capability). */
+export interface EventDashboard {
+  participant_count: number;
+  /** A fraction (0..1), not a percentage — the console formats it for display. */
+  completion_rate: number;
+  per_question: { step_id: string; correct: number; incorrect: number }[];
+  avg_response_ms: number;
+  final_participants: { participant_id: string; display_name: string; total_points: number; rank: number }[];
+  final_teams: { team_id: string; name: string; total_awarded: number; rank: number }[];
+}

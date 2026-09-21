@@ -50,6 +50,10 @@ export function EventEditorPage() {
         {adminCopy.liveControlLink}
       </Link>
 
+      <Link to={`/admin/events/${event.id}/dashboard`} className="text-sm underline">
+        {adminCopy.dashboardLink}
+      </Link>
+
       <EventDetailsForm event={event} readOnly={readOnly} onSaved={state.reload} />
 
       <JoinCodeQr joinCode={event.join_code} />

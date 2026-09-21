@@ -82,4 +82,14 @@ describe("EventEditorPage — freeze-on-start guard", () => {
     // Join code/QR still display — read-only doesn't hide informational content.
     expect(screen.getByTestId("join-code-value")).toHaveTextContent("AAAAAA");
   });
+
+  it("links to the analytics dashboard (analytics-dashboard)", async () => {
+    mockEventEditor("draft");
+    renderEditor();
+
+    expect(await screen.findByRole("link", { name: /tableau de bord/i })).toHaveAttribute(
+      "href",
+      "/admin/events/evt-1/dashboard",
+    );
+  });
 });
