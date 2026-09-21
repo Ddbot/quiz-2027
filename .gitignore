@@ -14,9 +14,16 @@ worker-configuration.d.ts
 .env
 .env.*
 !.env.example
+!.env.e2e.example
 .dev.vars
 .dev.vars.*
 !.dev.vars.example
+
+# Playwright (apps/web/e2e, local/manual only)
+apps/web/test-results/
+apps/web/playwright-report/
+apps/web/blob-report/
+apps/web/playwright/.cache/
 
 # tooling caches
 .wrangler/
