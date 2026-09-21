@@ -84,6 +84,50 @@ export async function buildFixture(): Promise<Fixture> {
   };
 }
 
+export interface SecondEventFixture {
+  eventId: string;
+  joinCode: string;
+  step: StepFixture;
+  identities: Record<string, Identity>;
+}
+
+/**
+ * A minimal second event (concurrent-live-events design.md D3) — 2
+ * participants, 1 untimed step — deliberately separate from the main
+ * 10-participant `buildFixture()` above, which stays untouched. Exists
+ * solely to prove two events can be live at once over real WebSocket
+ * connections, not to re-exercise scoring (already covered by the main
+ * scenario).
+ */
+export async function buildSecondEvent(): Promise<SecondEventFixture> {
+  const admin = createAdminClient();
+
+  const joinCode = `HR2${randomUUID().replace(/-/g, "").slice(0, 5).toUpperCase()}`;
+  const { data: event, error: eventError } = await admin
+    .from("event")
+    .insert({ join_code: joinCode, title: "PoC Validation Harness — concurrent event", language: "en", status: "draft" })
+    .select()
+    .single();
+  if (eventError || !event) throw new Error(`second event insert failed: ${eventError?.message}`);
+
+  const step = await createStep(admin, event.id, 1, { timed: false, countdownSeconds: 0, teamAwardPoints: 0 });
+
+  const [q1, q2] = await Promise.all([createAnonymousIdentity("q1"), createAnonymousIdentity("q2")]);
+  const identities = { q1, q2 };
+
+  for (const identity of Object.values(identities)) {
+    const { error } = await identity.client.rpc("join_event", {
+      p_join_code: joinCode,
+      p_display_name: `Harness ${identity.label.toUpperCase()}`,
+      p_over16_ack: true,
+      p_marketing_consent: false,
+    });
+    if (error) throw new Error(`${identity.label}: join_event failed: ${error.message}`);
+  }
+
+  return { eventId: event.id, joinCode, step, identities };
+}
+
 async function createStep(
   admin: ReturnType<typeof createAdminClient>,
   eventId: string,

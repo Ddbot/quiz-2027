@@ -279,12 +279,12 @@ async function trackedPlayer(label: string): Promise<TestUser> {
 }
 
 afterEach(async () => {
-  // Several tests transition their event to `live`, and only one `live`
-  // event may exist at a time (MILESTONE-02's partial unique index) — this
-  // must release the slot after *every* test, not just at the very end,
-  // otherwise a later test's own mc:start collides with an earlier test's
-  // still-live fixture. Deleting an event cascades to its
-  // steps/game_mcq/participants.
+  // Ordinary fixture hygiene — several tests transition their event to
+  // `live`, and this releases each test's own event after *every* test,
+  // not just at the very end, so a long run doesn't accumulate leftover
+  // fixture events. Deleting an event cascades to its
+  // steps/game_mcq/participants. Multiple events may be live concurrently
+  // (concurrent-live-events), so this is no longer about a global lock.
   if (createdEventIds.length === 0) return;
   const admin = adminClient();
   const ids = createdEventIds.splice(0, createdEventIds.length);

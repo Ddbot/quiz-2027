@@ -86,9 +86,9 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  // Only one `live` event may exist at a time (the partial unique index this
-  // suite itself tests) — it's a genuinely global resource, so release it for
-  // other test files/runs rather than leaving it live indefinitely.
+  // Ordinary fixture hygiene — this suite's events would otherwise linger
+  // in the local database indefinitely across runs. No global lock to
+  // release: multiple events may be live concurrently (concurrent-live-events).
   await admin.from("event").delete().eq("id", eventLive.id);
 });
 
@@ -264,13 +264,16 @@ describe("A participant answers a given step at most once", () => {
   });
 });
 
-describe("At most one event is live at a time", () => {
-  it("rejects setting a second event to live while one already is", async () => {
+describe("Multiple events may be live concurrently", () => {
+  it("accepts setting a second event to live while one already is", async () => {
     const { error } = await admin.from("event").update({ status: "live" }).eq("id", eventA.id);
-    expect(error).not.toBeNull();
+    expect(error).toBeNull();
 
     const after = await admin.from("event").select("status").eq("id", eventA.id).single();
-    expect(after.data?.status).toBe("draft");
+    expect(after.data?.status).toBe("live");
+
+    const stillLive = await admin.from("event").select("status").eq("id", eventLive.id).single();
+    expect(stillLive.data?.status).toBe("live");
   });
 });
 
