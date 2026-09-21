@@ -1963,6 +1963,77 @@ describe("reconnect shows current state, not a replay (FR-063)", () => {
   });
 });
 
+describe("a player who already answered sees correct state on reconnect (resilience-recovery-hardening, FR-085)", () => {
+  it("shows the step as locked, not still active, after it was locked while the player was disconnected", async () => {
+    const admin = await trackedAdmin("player-reconnect-locked-admin");
+    const player = await trackedPlayer("player-reconnect-locked-player");
+    const eventId = await makeDraftEvent();
+    const step = await createStep(eventId, 1);
+    await adminClient()
+      .from("participant")
+      .insert({ event_id: eventId, profile_id: player.profileId, display_name: "ReconnectingPlayer" });
+
+    const controllerWs = await connectAndClaimControl(eventId, admin);
+    controllerWs.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(controllerWs);
+
+    const firstPlayerWs = await connect(eventId, player.accessToken);
+    await waitForMessage(firstPlayerWs); // initial snapshot
+    firstPlayerWs.send(JSON.stringify({ type: "answer:submit", payload: { stepId: step.id, optionId: "a" } }));
+    await waitForMessage(firstPlayerWs); // answer_ack
+    firstPlayerWs.close();
+
+    // The step gets locked while the player is disconnected.
+    controllerWs.send(JSON.stringify({ type: "mc:lock" }));
+    await waitForMessage(controllerWs);
+
+    // Reconnect: a fresh connection, not a resumed one — the snapshot must
+    // reflect what actually happened while this player was away, not stale
+    // "active" state from before they disconnected.
+    const secondPlayerWs = await connect(eventId, player.accessToken);
+    const snapshot = await waitForMessage(secondPlayerWs);
+    expect(snapshot).toMatchObject({ type: "state", step: { id: step.id, status: "locked" } });
+
+    controllerWs.close();
+    secondPlayerWs.close();
+  });
+
+  it("still rejects a repeated answer as already_answered after disconnecting and reconnecting, while the step is still active", async () => {
+    const admin = await trackedAdmin("player-reconnect-dup-admin");
+    const player = await trackedPlayer("player-reconnect-dup-player");
+    const eventId = await makeDraftEvent();
+    const step = await createStep(eventId, 1);
+    await adminClient()
+      .from("participant")
+      .insert({ event_id: eventId, profile_id: player.profileId, display_name: "ReconnectingPlayer" });
+
+    const controllerWs = await connectAndClaimControl(eventId, admin);
+    controllerWs.send(JSON.stringify({ type: "mc:start" }));
+    await waitForMessage(controllerWs);
+
+    const firstPlayerWs = await connect(eventId, player.accessToken);
+    await waitForMessage(firstPlayerWs); // initial snapshot
+    firstPlayerWs.send(JSON.stringify({ type: "answer:submit", payload: { stepId: step.id, optionId: "a" } }));
+    await waitForMessage(firstPlayerWs); // answer_ack
+    firstPlayerWs.close();
+
+    // Reconnect while the step is still active (not locked) — the only
+    // thing standing between this player and a second accepted answer is
+    // the disconnect/reconnect boundary itself, which must not reset or
+    // bypass the per-(step, participant) uniqueness check.
+    const secondPlayerWs = await connect(eventId, player.accessToken);
+    const snapshot = await waitForMessage(secondPlayerWs);
+    expect(snapshot).toMatchObject({ type: "state", step: { id: step.id, status: "active" } });
+
+    secondPlayerWs.send(JSON.stringify({ type: "answer:submit", payload: { stepId: step.id, optionId: "b" } }));
+    const response = await waitForMessage(secondPlayerWs);
+    expect(response).toMatchObject({ type: "error", code: "already_answered" });
+
+    controllerWs.close();
+    secondPlayerWs.close();
+  });
+});
+
 describe("full live scenario with a screen connection (task 3.2)", () => {
   it(
     "mc:start -> answer:submit -> mc:lock -> mc:reveal -> operator:display leaves the screen with everything it needs for each of the 7 views",

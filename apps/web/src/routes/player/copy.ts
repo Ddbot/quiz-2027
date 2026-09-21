@@ -41,6 +41,7 @@ export const playerCopy = {
 
     joining: "Connexion en cours…",
     joinedTitle: "Vous avez rejoint l'événement",
+    reconnectingNotice: "Connexion en cours… vos réponses ne sont pas envoyées tant que ce message est affiché.",
 
     errorProfanity: "Ce nom n'est pas autorisé. Merci d'en choisir un autre.",
     errorInvalidCode: "Ce code ne correspond à aucun événement disponible.",
@@ -132,6 +133,7 @@ export const playerCopy = {
 
     joining: "Joining…",
     joinedTitle: "You've joined the event",
+    reconnectingNotice: "Reconnecting… your answers aren't being sent while this message is shown.",
 
     errorProfanity: "That name isn't allowed. Please choose another one.",
     errorInvalidCode: "That code doesn't match any joinable event.",
