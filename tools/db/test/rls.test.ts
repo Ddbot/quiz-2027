@@ -335,3 +335,47 @@ describe("Season standings aggregate across events", () => {
     expect(adminView).toHaveLength(1);
   });
 });
+
+describe("profanity_word is not directly reachable via PostgREST (standalone RLS fix)", () => {
+  it("denies an anonymous read", async () => {
+    const anon = createAnonClient();
+    const { data, error } = await anon.from("profanity_word").select("*");
+    expect(error).not.toBeNull();
+    expect(data).toBeNull();
+  });
+
+  it("denies an authenticated (non-admin) read", async () => {
+    const player = await createPlayer("rls-profanity-reader");
+    const client = createUserClient(player.accessToken);
+    const { data, error } = await client.from("profanity_word").select("*");
+    expect(error).not.toBeNull();
+    expect(data).toBeNull();
+  });
+
+  it("denies an authenticated (non-admin) write", async () => {
+    const player = await createPlayer("rls-profanity-writer");
+    const client = createUserClient(player.accessToken);
+    const { error } = await client.from("profanity_word").insert({ word: "nuisance", language: "en" });
+    expect(error).not.toBeNull();
+
+    const check = await admin.from("profanity_word").select("*").eq("word", "nuisance");
+    expect(check.data).toEqual([]);
+  });
+
+  it("denies deleting the wordlist outright", async () => {
+    const player = await createPlayer("rls-profanity-deleter");
+    const client = createUserClient(player.accessToken);
+    await client.from("profanity_word").delete().neq("word", "");
+
+    const check = await admin.from("profanity_word").select("*", { count: "exact", head: true });
+    expect(check.count).toBeGreaterThan(0); // the seeded wordlist is still intact
+  });
+
+  it("is_profane() still works for a non-admin caller, unaffected by RLS (security definer)", async () => {
+    const player = await createPlayer("rls-profanity-still-works");
+    const client = createUserClient(player.accessToken);
+    const { data, error } = await client.rpc("is_profane", { candidate: "such a bullshit name" });
+    expect(error).toBeNull();
+    expect(data).toBe(true);
+  });
+});
