@@ -9,7 +9,7 @@
 
 ## 2. CI integration
 
-- [ ] 2.1 New step in `.github/workflows/ci.yml`, after the existing `Test` step, running the harness against the same already-started local Supabase instance and `apps/party/.dev.vars` (design.md D6, no duplicated setup) — verify by pushing this branch and confirming the new step runs and passes in the real GitHub Actions environment (not just locally).
+- [x] 2.1 New step in `.github/workflows/ci.yml`, after the existing `Test` step, running the harness against the same already-started local Supabase instance and `apps/party/.dev.vars` (design.md D6, no duplicated setup) — verify by pushing this branch and confirming the new step runs and passes in the real GitHub Actions environment (not just locally). **Done**: pushed as PR #38; the `Test` step itself failed twice first — the same pre-existing, documented `pnpm -w test` parallel-workspace flakiness (`apps/party`'s `mc:start` colliding with `tools/db`'s use of the "one live event" constraint against the same local Supabase instance; both failures showed the identical `{type:'error'}` vs `{type:'state', eventStatus:'live'}` signature), unrelated to this milestone's own changes — a third rerun passed clean, including the new "PoC validation harness" step itself.
 
 ## 3. Playwright e2e (local/manual only — design.md D1)
 
