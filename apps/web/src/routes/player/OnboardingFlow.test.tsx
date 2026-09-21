@@ -245,6 +245,53 @@ describe("OnboardingFlow", () => {
     expect(await screen.findByTestId("live-waiting-view")).toBeInTheDocument();
   });
 
+  it("shows an error message when the room rejects a command, instead of silently doing nothing (production feedback)", async () => {
+    const liveEventFr = { ...draftEventFr, status: "live" as const };
+    const user = userEvent.setup();
+    getSession.mockResolvedValue({
+      data: { session: { access_token: "test-token", user: { id: "u-1" } } },
+    });
+    signInAnonymously.mockResolvedValue({ error: null });
+    rpc.mockResolvedValue({
+      data: { participant: { id: "p-1", display_name: "Alice" }, event: { id: liveEventFr.id } },
+      error: null,
+    });
+
+    renderFlow(liveEventFr);
+
+    await user.type(screen.getByLabelText(/nom affiché/i), "Alice");
+    await user.click(screen.getByLabelText(/plus de 16 ans/i));
+    await user.click(screen.getByLabelText(/conditions d'utilisation/i));
+    await user.click(screen.getByRole("button", { name: /continuer/i }));
+    await user.click(screen.getByRole("button", { name: /confirmer et rejoindre/i }));
+
+    await waitFor(() => expect(screen.getByTestId("joined-display-name")).toHaveTextContent("Alice"));
+    await waitFor(() => expect(socketInstances).toHaveLength(1));
+    const socket = socketInstances[0]!;
+    socket.dispatchEvent(
+      new MessageEvent("message", {
+        data: JSON.stringify({
+          type: "state",
+          eventStatus: "live",
+          step: null,
+          question: null,
+          display: "waiting",
+          controllerId: "admin-1",
+          serverNow: new Date().toISOString(),
+        }),
+      }),
+    );
+    await screen.findByTestId("live-waiting-view");
+
+    socket.dispatchEvent(
+      new MessageEvent("message", {
+        data: JSON.stringify({ type: "error", code: "not_active", message: "This step is not currently accepting answers" }),
+      }),
+    );
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(/une erreur est survenue/i);
+  });
+
   it("shows the event-ended state once the room broadcasts eventStatus ended (reveal-leaderboard-end)", async () => {
     const liveEventFr = { ...draftEventFr, status: "live" as const };
     const user = userEvent.setup();

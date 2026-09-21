@@ -136,7 +136,10 @@ interface JoinedViewProps {
  */
 function JoinedView({ copy, event, participant }: JoinedViewProps) {
   const { session } = useAuth();
-  const { state, answerAck, ownResult, sendCommand, isExpired } = useEventRoom(event.id, session?.access_token);
+  const { state, answerAck, lastError, ownResult, sendCommand, isExpired } = useEventRoom(
+    event.id,
+    session?.access_token,
+  );
   const effectiveStatus = state?.eventStatus ?? event.status;
 
   // Kill switch takes priority over every other view (moderation-kill-switch
@@ -156,15 +159,27 @@ function JoinedView({ copy, event, participant }: JoinedViewProps) {
         <TeamLobbyStep copy={copy} eventId={event.id} participantId={participant.id} />
       )}
       {effectiveStatus === "live" && state && (
-        <LiveGameView
-          copy={copy}
-          step={state.step}
-          question={state.question}
-          answerAck={answerAck}
-          ownResult={ownResult}
-          isExpired={isExpired}
-          sendCommand={sendCommand}
-        />
+        <>
+          {/* A player previously got no feedback at all when answer:submit
+              was rejected (e.g. already answered, too late, kill switch) —
+              the question view just sat there with nothing visibly
+              happening. Surfacing the room's own last error here fixes that
+              (production feedback). */}
+          {lastError && (
+            <p role="alert" className="text-sm text-destructive">
+              {copy.errorGeneric}
+            </p>
+          )}
+          <LiveGameView
+            copy={copy}
+            step={state.step}
+            question={state.question}
+            answerAck={answerAck}
+            ownResult={ownResult}
+            isExpired={isExpired}
+            sendCommand={sendCommand}
+          />
+        </>
       )}
       {effectiveStatus === "ended" && <EventEndedView copy={copy} />}
     </div>
