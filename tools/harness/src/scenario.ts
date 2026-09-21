@@ -1,7 +1,7 @@
 import { PartySocket } from "partysocket";
 
 import { createAdminIdentity, createAnonymousIdentity, type Identity } from "./identities.js";
-import type { Fixture } from "./fixture.js";
+import type { Fixture, SecondEventFixture } from "./fixture.js";
 
 interface AnyMessage {
   type: string;
@@ -216,4 +216,73 @@ export async function runScenario(port: string, fixture: Fixture): Promise<Scena
   for (const socket of sockets.values()) socket.close();
 
   return { timings, p10 };
+}
+
+export interface SecondEventScenarioResult {
+  /** Whether a direct Postgres check ever observed both this event and the caller's other event as `live` at the same moment (concurrent-live-events design.md D3). */
+  observedBothLive: boolean;
+}
+
+/**
+ * Drives a minimal, self-contained second event to completion, concurrently
+ * with whatever else the caller is running — deliberately separate from
+ * `runScenario` above, which is untouched by this addition (design.md D3).
+ * `checkBothLive` is polled after this event's own `mc:start` succeeds,
+ * to deterministically catch a moment where both events are observably
+ * live in Postgres at once, rather than assuming a race will overlap.
+ */
+export async function runSecondEventScenario(
+  port: string,
+  fixture: SecondEventFixture,
+  checkBothLive: () => Promise<boolean>,
+): Promise<SecondEventScenarioResult> {
+  const admin = await createAdminIdentity("admin-b");
+  const adminSocket = await connect(port, fixture.eventId, admin.accessToken);
+  await nextMessage(adminSocket); // initial snapshot
+
+  const sockets = new Map<string, PartySocket>();
+  for (const [label, identity] of Object.entries(fixture.identities)) {
+    const socket = await connect(port, fixture.eventId, identity.accessToken);
+    await nextMessage(socket); // initial snapshot
+    sockets.set(label, socket);
+  }
+
+  adminSocket.send(JSON.stringify({ type: "mc:claim_control" }));
+  await nextMessage(adminSocket);
+
+  adminSocket.send(JSON.stringify({ type: "mc:start" }));
+  const started = await nextMessage(adminSocket);
+  if (started.type === "error") {
+    throw new Error(`second event mc:start rejected: ${JSON.stringify(started)}`);
+  }
+
+  let observedBothLive = false;
+  const deadline = Date.now() + 10_000;
+  while (Date.now() < deadline) {
+    if (await checkBothLive()) {
+      observedBothLive = true;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 100));
+  }
+
+  const q1 = sockets.get("q1");
+  if (!q1) throw new Error("no connected socket for q1");
+  await submitAnswer(q1, fixture.step.id, "a");
+  // q2 deliberately doesn't answer — this event's own scoring isn't the
+  // point (the main scenario already proves that); this just needs to
+  // reach a real end-to-end completion.
+
+  adminSocket.send(JSON.stringify({ type: "mc:lock" }));
+  await nextMessage(adminSocket);
+  adminSocket.send(JSON.stringify({ type: "mc:reveal" }));
+  await drain(adminSocket, 3); // state, step_results, rankings
+
+  adminSocket.send(JSON.stringify({ type: "mc:end" }));
+  await drain(adminSocket, 2); // state, rankings
+
+  adminSocket.close();
+  for (const socket of sockets.values()) socket.close();
+
+  return { observedBothLive };
 }

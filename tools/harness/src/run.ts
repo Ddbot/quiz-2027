@@ -1,9 +1,9 @@
 import { createAdminClient } from "./adminClient.js";
 import { WRANGLER_PORT } from "./env.js";
-import { buildFixture } from "./fixture.js";
+import { buildFixture, buildSecondEvent } from "./fixture.js";
 import type { Identity } from "./identities.js";
 import { EXPECTED_INDIVIDUAL_TOTALS, EXPECTED_TEAM_TOTALS } from "./expected.js";
-import { runScenario } from "./scenario.js";
+import { runScenario, runSecondEventScenario } from "./scenario.js";
 import { startWranglerDev } from "./wrangler.js";
 
 interface Failure {
@@ -23,12 +23,36 @@ async function main(): Promise<void> {
     const fixture = await buildFixture();
     console.log(`[harness] fixture ready: event ${fixture.eventId}, join code ${fixture.joinCode}`);
 
-    console.log("[harness] running scripted scenario over real partysocket connections...");
-    const { timings, p10 } = await runScenario(wrangler.port, fixture);
+    console.log("[harness] building a second, minimal event (concurrent-live-events proof)...");
+    const secondFixture = await buildSecondEvent();
+    console.log(`[harness] second event ready: ${secondFixture.eventId}, join code ${secondFixture.joinCode}`);
+
+    const admin = createAdminClient();
+    const checkBothLive = async (): Promise<boolean> => {
+      const { data, error } = await admin
+        .from("event")
+        .select("id, status")
+        .in("id", [fixture.eventId, secondFixture.eventId]);
+      if (error || !data) return false;
+      return data.length === 2 && data.every((row) => row.status === "live");
+    };
+
+    console.log("[harness] running the main scripted scenario and the second event concurrently...");
+    const [{ timings, p10 }, secondResult] = await Promise.all([
+      runScenario(wrangler.port, fixture),
+      runSecondEventScenario(wrangler.port, secondFixture, checkBothLive),
+    ]);
     console.log("[harness] scenario complete. timings:");
     for (const t of timings) console.log(`  - ${t.label}: ${t.ms}ms`);
 
-    const admin = createAdminClient();
+    if (!secondResult.observedBothLive) {
+      failures.push({
+        label: "concurrent-live-events",
+        detail: "never observed both events as status='live' in Postgres at the same time",
+      });
+    } else {
+      console.log("[harness] confirmed: both events were observed status='live' in Postgres simultaneously.");
+    }
 
     // Map every identity's profileId to its participant row for this event —
     // event_final_participant/event_final_team are keyed by participant_id/
@@ -106,7 +130,7 @@ async function main(): Promise<void> {
       }
     }
 
-    console.log(`[harness] participants: ${participantRows.length + 0} rows read (10 expected including p10)`);
+    console.log(`[harness] participants: ${participantRows.length} rows read (10 expected including p10)`);
     console.log(`[harness] event_final_participant: ${finalParticipants.length} rows, event_final_team: ${finalTeams.length} rows`);
   } catch (err) {
     failures.push({ label: "setup/scenario", detail: err instanceof Error ? err.message : String(err) });
@@ -122,7 +146,9 @@ async function main(): Promise<void> {
     return;
   }
 
-  console.log("\n[harness] PASSED — all hand-calculated individual and team totals matched exactly.");
+  console.log(
+    "\n[harness] PASSED — all hand-calculated individual and team totals matched exactly, and two events were confirmed live concurrently.",
+  );
 }
 
 main().catch((err) => {

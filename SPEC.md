@@ -82,8 +82,8 @@ Priority tags: **(M)** must-have for the PoC, **(S)** should-have. All requireme
 - **FR-024 (M)** — The system SHALL generate one join code and a corresponding QR code per event. *(REQ §2.10a)*
 - **FR-025 (M)** — The system SHALL let the admin configure the waiting screen: optional media (image or short video) for the big screen, and an optional countdown target time. *(REQ §4.1)*
 - **FR-026 (M)** — The system SHALL freeze all event and step content when the event transitions to `live`, rejecting further edits until the event has ended (after which it is permanently read-only). *(REQ §2.10b, §4.1)*
-- **FR-027 (M)** — The system SHALL allow at most one event in `live` status at any time. *(REQ §2.10c)*
-- **FR-028 (M)** — The system SHALL stamp every event-bound record with its event ID so that concurrent events can be enabled later without data migration. *(REQ §11.16)*
+- **FR-027 (M)** — The system SHALL allow any number of events to be in `live` status concurrently, with no system-wide cap. *(REQ §2.10c; relaxed by `concurrent-live-events`, see REQ §16)*
+- **FR-028 (M)** — The system SHALL stamp every event-bound record with its event ID, which is what makes concurrent events possible. *(REQ §11.16)*
 - **FR-029 (S)** — The system SHALL strip EXIF/metadata from any uploaded media on ingest. *(REQ §5.5, §11.14)*
 
 ### 5.4 Live Flow & Synchronisation
@@ -277,7 +277,6 @@ All tables carry `event_id` where event-bound (FR-028). Timestamps are `timestam
 - `created_by` UUID → profile
 - `started_at`, `ended_at` timestamptz NULL
 - `created_at`
-- Partial unique index: at most one row with `status = 'live'`.
 - Relationships: 1—N `step`, `team`, `participant`.
 
 **step**
@@ -617,7 +616,7 @@ Milestones are ordered by dependency. Effort: S ≈ ≤1 day, M ≈ 2–4 days, 
 
 | Term | Definition |
 |---|---|
-| **Event** | One live quiz session for one audience. Authored in `draft`, runs as `live`, then permanently `ended`/read-only. At most one `live` at a time in this iteration. |
+| **Event** | One live quiz session for one audience. Authored in `draft`, runs as `live`, then permanently `ended`/read-only. Any number of events may be `live` concurrently. |
 | **Step** | One ordered position in an event; contains exactly one game. In this iteration every step is an MCQ. |
 | **Game / `game_mcq`** | The polymorphic unit inside a step. Only the `mcq` type exists now; `step` stays generic so future real-time game types can be added without schema change. |
 | **MCQ** | A single multiple-choice question: one prompt, several options, exactly one correct option; timed or untimed. |
