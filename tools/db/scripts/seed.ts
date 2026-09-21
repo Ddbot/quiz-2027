@@ -13,10 +13,15 @@ const admin = createAdminClient();
 const DEV_ADMIN_EMAIL = "admin@test.com";
 const DEV_ADMIN_PASSWORD = "00000000";
 
-const { data: existingDevAdmin } = await admin.auth.admin.listUsers();
-const devAdminAlreadyExists = existingDevAdmin?.users.some((u) => u.email === DEV_ADMIN_EMAIL) ?? false;
+// Same idea, for a non-admin account — a memorable player login for manual
+// testing of the join/team-lobby/live-play flow by hand.
+const DEV_PLAYER_EMAIL = "player@test.com";
+const DEV_PLAYER_PASSWORD = "00000000";
 
-if (!devAdminAlreadyExists) {
+const { data: existingUsers } = await admin.auth.admin.listUsers();
+const existingEmails = new Set(existingUsers?.users.map((u) => u.email) ?? []);
+
+if (!existingEmails.has(DEV_ADMIN_EMAIL)) {
   const { error: createDevAdminError } = await admin.auth.admin.createUser({
     email: DEV_ADMIN_EMAIL,
     password: DEV_ADMIN_PASSWORD,
@@ -32,6 +37,20 @@ if (!devAdminAlreadyExists) {
   console.log(`Seeded dev admin ${DEV_ADMIN_EMAIL} / ${DEV_ADMIN_PASSWORD}`);
 } else {
   console.log(`Dev admin ${DEV_ADMIN_EMAIL} already exists, skipping.`);
+}
+
+if (!existingEmails.has(DEV_PLAYER_EMAIL)) {
+  const { error: createDevPlayerError } = await admin.auth.admin.createUser({
+    email: DEV_PLAYER_EMAIL,
+    password: DEV_PLAYER_PASSWORD,
+    email_confirm: true,
+  });
+  if (createDevPlayerError) {
+    throw new Error(`seed: failed to create dev player: ${createDevPlayerError.message}`);
+  }
+  console.log(`Seeded dev player ${DEV_PLAYER_EMAIL} / ${DEV_PLAYER_PASSWORD}`);
+} else {
+  console.log(`Dev player ${DEV_PLAYER_EMAIL} already exists, skipping.`);
 }
 
 const { data: event, error: eventError } = await admin
