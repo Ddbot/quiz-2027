@@ -158,6 +158,24 @@ describe("LiveControlPage — MC console", () => {
   });
 });
 
+describe("LiveControlPage — connection status indicator", () => {
+  it("shows the indicator before the connection opens, hides it once open, and shows it again on close", async () => {
+    renderPage();
+    const socket = await waitFor(() => {
+      expect(socketInstances).toHaveLength(1);
+      return socketInstances[0]!;
+    });
+
+    expect(screen.getByTestId("connection-status-indicator")).toBeInTheDocument();
+
+    socket.dispatchEvent(new Event("open"));
+    await waitFor(() => expect(screen.queryByTestId("connection-status-indicator")).not.toBeInTheDocument());
+
+    socket.dispatchEvent(new Event("close"));
+    await waitFor(() => expect(screen.getByTestId("connection-status-indicator")).toBeInTheDocument());
+  });
+});
+
 describe("LiveControlPage — operator:display", () => {
   it("sends operator:display with the right view for each button", async () => {
     const user = userEvent.setup();
