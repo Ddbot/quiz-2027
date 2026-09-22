@@ -42,7 +42,7 @@ function castToScreen(url: string): void {
 export function LiveControlPage() {
   const { eventId } = useParams<{ eventId: string }>();
   const { session } = useAuth();
-  const { state, lastError, sendCommand } = useEventRoom(eventId ?? "", session?.access_token);
+  const { state, connectionStatus, lastError, sendCommand } = useEventRoom(eventId ?? "", session?.access_token);
 
   if (!eventId) return null;
 
@@ -62,6 +62,17 @@ export function LiveControlPage() {
       )}
 
       {state?.killSwitch && <p role="alert">{adminCopy.killSwitchActiveNotice}</p>}
+
+      {/* `partysocket` already auto-reconnects with backoff (FR-086) — this
+          is purely so the admin sees *something* while that happens (or
+          while the connection never opens at all, e.g. a misconfigured
+          VITE_PARTY_HOST), instead of a page indistinguishable from a
+          healthy one where the controls just silently do nothing. */}
+      {connectionStatus !== "open" && (
+        <p data-testid="connection-status-indicator" role="status" className="text-muted-foreground text-sm">
+          {adminCopy.reconnectingNotice}
+        </p>
+      )}
 
       <section className="flex flex-col gap-1 text-sm">
         <p>

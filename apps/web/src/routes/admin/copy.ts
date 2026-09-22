@@ -89,6 +89,7 @@ export const adminCopy = {
   statusLabel: "Statut de l'événement",
   currentStepLabel: "Étape en cours",
   noCurrentStep: "Aucune étape en cours.",
+  reconnectingNotice: "Connexion en cours… vos commandes ne sont pas envoyées tant que ce message est affiché.",
 
   displaySectionTitle: "Écran",
   displayWaiting: "Attente",
