@@ -183,6 +183,9 @@ export function McqForm({ step, mcq, readOnly, onSaved }: Props) {
           onChange={(e) => setTeamAwardPoints(Number(e.target.value))}
         />
       </label>
+      {teamAwardPoints === 0 && (
+        <p className="text-muted-foreground text-xs">{adminCopy.teamAwardPointsZeroHint}</p>
+      )}
 
       {error && (
         <p role="alert" className="text-sm text-destructive">
