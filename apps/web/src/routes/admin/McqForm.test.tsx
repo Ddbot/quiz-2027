@@ -101,6 +101,20 @@ describe("McqForm", () => {
     expect(onSaved).toHaveBeenCalled();
   });
 
+  it("shows a hint while team award points is 0, and hides it once set otherwise", async () => {
+    mockWrites();
+    const user = userEvent.setup();
+    render(<McqForm step={STEP} mcq={null} readOnly={false} onSaved={vi.fn()} />);
+
+    expect(screen.getByText(/aucun bonus d'équipe/i)).toBeInTheDocument();
+
+    const teamPoints = screen.getByLabelText(/points bonus pour l'équipe/i);
+    await user.clear(teamPoints);
+    await user.type(teamPoints, "5");
+
+    expect(screen.queryByText(/aucun bonus d'équipe/i)).not.toBeInTheDocument();
+  });
+
   it("rejects submission without a designated correct option", async () => {
     mockWrites();
     const user = userEvent.setup();

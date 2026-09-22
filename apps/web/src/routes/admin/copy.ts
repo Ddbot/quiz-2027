@@ -71,6 +71,7 @@ export const adminCopy = {
   countdownSecondsLabel: "Durée du compte à rebours (secondes)",
   pointsCorrectLabel: "Points pour une bonne réponse",
   teamAwardPointsLabel: "Points bonus pour l'équipe gagnante",
+  teamAwardPointsZeroHint: "0 signifie qu'aucun bonus d'équipe ne sera attribué pour cette étape.",
 
   liveControlLink: "Contrôle en direct",
   liveControlTitle: "Contrôle en direct",
