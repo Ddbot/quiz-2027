@@ -223,7 +223,7 @@ function EventEndedView({ copy }: { copy: PlayerCopy }) {
   return (
     <div data-testid="event-ended-view" className="flex flex-col items-center gap-2 text-center">
       <h2 className="text-lg font-semibold">{copy.eventEndedTitle}</h2>
-      <p className="text-muted-foreground text-sm">{copy.eventEndedBody}</p>
+      <p className="text-muted-foreground text-sm"><a href="/">{copy.eventEndedBody}</a></p>
     </div>
   );
 }

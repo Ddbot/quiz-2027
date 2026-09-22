@@ -80,8 +80,8 @@ export const playerCopy = {
     landingJoinButton: "Rejoindre",
     landingAdminLink: "Vous êtes organisateur ou organisatrice ? Se connecter",
 
-    eventEndedTitle: "L'événement est terminé",
-    eventEndedBody: "Merci d'avoir joué !",
+    eventEndedTitle: "L'événement est terminé, merci d'avoir joué !",
+    eventEndedBody: "Retour à l'accueil",
 
     accountLink: "Gérer mon compte",
     accountBack: "Retour",
