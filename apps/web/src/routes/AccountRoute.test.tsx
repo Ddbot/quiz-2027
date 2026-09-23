@@ -57,6 +57,15 @@ describe("AccountRoute — signed in", () => {
     });
   });
 
+  it("signs out and navigates home when the sign-out button is clicked", async () => {
+    const user = userEvent.setup();
+    renderAccount();
+
+    await user.click(await screen.findByRole("button", { name: /^se déconnecter$/i }));
+    await waitFor(() => expect(signOut).toHaveBeenCalled());
+    expect(await screen.findByText("landing")).toBeInTheDocument();
+  });
+
   it("exports data and displays it on request", async () => {
     const exportPayload = { profile: { id: "u-1" }, participants: [], answers: [] };
     rpc.mockResolvedValue({ data: exportPayload, error: null });

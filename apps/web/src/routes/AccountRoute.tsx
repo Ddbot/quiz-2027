@@ -67,12 +67,15 @@ export function AccountRoute() {
       )}
 
       <section className="flex flex-col gap-2">
-        <h2 className="text-lg font-semibold">Se déconnecter</h2>
-        <Button type="button" onClick={() => {
-          void signOut();
-          navigate('/');
-        }}>
-          Se déconnecter
+        <h2 className="text-lg font-semibold">{copy.accountSignOutTitle}</h2>
+        <Button
+          type="button"
+          onClick={() => {
+            void signOut();
+            navigate("/");
+          }}
+        >
+          {copy.accountSignOutButton}
         </Button>
       </section>
 
