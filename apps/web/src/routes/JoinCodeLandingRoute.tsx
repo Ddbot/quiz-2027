@@ -27,7 +27,7 @@ export function JoinCodeLandingRoute() {
 
   return (
     <main className="relative isolate mx-auto flex min-h-dvh max-w-md flex-col justify-center p-6">
-      <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+      <div aria-hidden className="pointer-events-none fixed inset-0 -z-10 overflow-hidden">
         <div className="bg-primary/15 absolute -top-24 -left-16 h-64 w-64 rounded-full blur-3xl" />
         <div className="bg-primary/10 absolute -right-20 -bottom-28 h-72 w-72 rounded-full blur-3xl" />
       </div>
