@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 
 import { isProfane } from "@quiz/shared";
 
@@ -223,7 +224,11 @@ function EventEndedView({ copy }: { copy: PlayerCopy }) {
   return (
     <div data-testid="event-ended-view" className="flex flex-col items-center gap-2 text-center">
       <h2 className="text-lg font-semibold">{copy.eventEndedTitle}</h2>
-      <p className="text-muted-foreground text-sm">{copy.eventEndedBody}</p>
+      <p className="text-muted-foreground text-sm">
+        <Link to="/" className="underline">
+          {copy.eventEndedBody}
+        </Link>
+      </p>
     </div>
   );
 }

@@ -80,12 +80,14 @@ export const playerCopy = {
     landingJoinButton: "Rejoindre",
     landingAdminLink: "Vous êtes organisateur ou organisatrice ? Se connecter",
 
-    eventEndedTitle: "L'événement est terminé",
-    eventEndedBody: "Merci d'avoir joué !",
+    eventEndedTitle: "L'événement est terminé, merci d'avoir joué !",
+    eventEndedBody: "Retour à l'accueil",
 
     accountLink: "Gérer mon compte",
     accountBack: "Retour",
     accountPageTitle: "Mon compte",
+    accountSignOutTitle: "Se déconnecter",
+    accountSignOutButton: "Se déconnecter",
     accountExportTitle: "Exporter mes données",
     accountExportBody: "Récupérez une copie de votre profil, vos participations et vos réponses.",
     accountExportButton: "Exporter mes données",
@@ -172,12 +174,14 @@ export const playerCopy = {
     landingJoinButton: "Join",
     landingAdminLink: "Are you the organizer? Sign in",
 
-    eventEndedTitle: "The event has ended",
-    eventEndedBody: "Thanks for playing!",
+    eventEndedTitle: "The event has ended, thanks for playing!",
+    eventEndedBody: "Back to home",
 
     accountLink: "Manage my account",
     accountBack: "Back",
     accountPageTitle: "My account",
+    accountSignOutTitle: "Sign out",
+    accountSignOutButton: "Sign out",
     accountExportTitle: "Export my data",
     accountExportBody: "Get a copy of your profile, participations, and answers.",
     accountExportButton: "Export my data",

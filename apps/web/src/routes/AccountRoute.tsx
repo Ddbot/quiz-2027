@@ -67,6 +67,19 @@ export function AccountRoute() {
       )}
 
       <section className="flex flex-col gap-2">
+        <h2 className="text-lg font-semibold">{copy.accountSignOutTitle}</h2>
+        <Button
+          type="button"
+          onClick={() => {
+            void signOut();
+            navigate("/");
+          }}
+        >
+          {copy.accountSignOutButton}
+        </Button>
+      </section>
+
+      <section className="flex flex-col gap-2">
         <h2 className="text-lg font-semibold">{copy.accountExportTitle}</h2>
         <p className="text-muted-foreground text-sm">{copy.accountExportBody}</p>
         <Button type="button" onClick={() => void handleExport()}>

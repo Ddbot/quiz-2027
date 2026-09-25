@@ -333,6 +333,7 @@ describe("OnboardingFlow", () => {
     expect(await screen.findByTestId("event-ended-view")).toBeInTheDocument();
     expect(screen.queryByTestId("live-waiting-view")).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: /équipe/i })).not.toBeInTheDocument();
+    expect(screen.getByRole("link", { name: /retour à l'accueil/i })).toHaveAttribute("href", "/");
   });
 
   it("blanks the joined view once the room broadcasts killSwitch true, and resumes once cleared (moderation-kill-switch)", async () => {
